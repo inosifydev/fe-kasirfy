@@ -1,6 +1,3 @@
-#Foldering
-
-
 # 📁 Standar Foldering — Next.js (App Router) di Vercel
 
 Standar ini dibuat untuk project frontend Next.js yang di-deploy ke Vercel, menggunakan **App Router**, **TypeScript**, dan **Tailwind CSS**. Tujuannya: struktur konsisten, mudah di-scale, dan enak dipelihara oleh tim.
