@@ -5,7 +5,9 @@ import {
   useEffect,
   useState,
 } from "react";
+
 import { useRouter } from "next/navigation";
+
 import {
   AlertCircle,
   CheckCircle2,
@@ -26,17 +28,23 @@ import {
 export default function LoginPage() {
   const router = useRouter();
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [identifier, setIdentifier] =
+    useState("");
+
+  const [password, setPassword] =
+    useState("");
 
   const [showPassword, setShowPassword] =
     useState(false);
 
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error, setError] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(false);
 
   const [focusedField, setFocusedField] =
-    useState<"username" | "password" | null>(null);
+    useState<string | null>(null);
 
   const [demoFilled, setDemoFilled] =
     useState(false);
@@ -55,10 +63,11 @@ export default function LoginPage() {
     event.preventDefault();
 
     setError("");
-    setDemoFilled(false);
 
-    if (!username.trim()) {
-      setError("Username wajib diisi.");
+    if (!identifier.trim()) {
+      setError(
+        "Email atau username wajib diisi."
+      );
       return;
     }
 
@@ -71,22 +80,28 @@ export default function LoginPage() {
 
     try {
       const response = await login({
-        username: username.trim(),
+        identifier: identifier.trim(),
         password,
       });
 
-      if (!response.success || !response.user) {
+      if (
+        !response.success ||
+        !response.user
+      ) {
         setError(
           response.message ||
-            "Username atau password salah."
+            "Email/username atau password salah."
         );
+
         return;
       }
 
       saveSession(response.user);
 
       router.replace("/dashboard");
-    } catch {
+    } catch (error) {
+      console.error(error);
+
       setError(
         "Terjadi kesalahan. Silakan coba lagi."
       );
@@ -95,127 +110,179 @@ export default function LoginPage() {
     }
   };
 
-  const handleDemoLogin = () => {
-    setUsername("admin");
-    setPassword("admin123");
-    setError("");
+  const handleDemoAccount = () => {
+    setIdentifier("owner01");
+    setPassword("owner123");
+
     setDemoFilled(true);
+    setError("");
+
+    setTimeout(() => {
+      setDemoFilled(false);
+    }, 2000);
   };
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <div className="flex min-h-screen items-center justify-center px-4 py-8">
-        <div className="w-full max-w-md">
+      <div className="flex min-h-screen">
+        {/* LEFT SIDE */}
+        <div className="hidden lg:flex lg:w-1/2 bg-slate-900">
+          <div className="flex w-full flex-col justify-between p-12 xl:p-16">
+            <div>
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-600">
+                  <Store
+                    size={22}
+                    className="text-white"
+                  />
+                </div>
 
-          {/* Logo */}
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 shadow-sm transition duration-300 hover:scale-105">
-              <Store
-                size={27}
-                className="text-white"
-              />
+                <span className="text-xl font-semibold text-white">
+                  Kasirfy
+                </span>
+              </div>
             </div>
 
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Kasirfy
-            </h1>
+            <div className="max-w-lg">
+              <p className="mb-4 text-sm font-medium uppercase tracking-wider text-indigo-400">
+                Point of Sales
+              </p>
 
-            <p className="mt-1 text-sm text-slate-500">
-              Point of Sale
-            </p>
-          </div>
+              <h1 className="text-4xl font-bold leading-tight text-white xl:text-5xl">
+                Kelola bisnis Anda
+                <br />
+                dengan lebih mudah.
+              </h1>
 
-          {/* Card */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-slate-900">
-                Masuk
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Masuk ke akun Kasirfy Anda.
+              <p className="mt-6 max-w-md text-base leading-7 text-slate-400">
+                Kelola transaksi, barang, stok,
+                laporan, dan pengguna dalam satu
+                sistem kasir yang sederhana.
               </p>
             </div>
 
-            {/* Error */}
+            <p className="text-sm text-slate-500">
+              © 2026 Kasirfy. All rights reserved.
+            </p>
+          </div>
+        </div>
+
+        {/* RIGHT SIDE */}
+        <div className="flex w-full items-center justify-center px-6 py-10 lg:w-1/2 lg:px-12">
+          <div className="w-full max-w-md">
+            {/* MOBILE LOGO */}
+            <div className="mb-8 flex items-center justify-center gap-3 lg:hidden">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-600">
+                <Store
+                  size={22}
+                  className="text-white"
+                />
+              </div>
+
+              <span className="text-xl font-semibold text-slate-900">
+                Kasirfy
+              </span>
+            </div>
+
+            {/* HEADER */}
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-slate-900">
+                Selamat datang kembali
+              </h2>
+
+              <p className="mt-2 text-sm text-slate-500">
+                Masuk ke akun Anda untuk melanjutkan.
+              </p>
+            </div>
+
+            {/* ERROR */}
             {error && (
-              <div className="mb-5 flex items-start gap-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+              <div className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
                 <AlertCircle
                   size={18}
-                  className="mt-0.5 shrink-0"
+                  className="mt-0.5 shrink-0 text-red-500"
                 />
 
-                <p>{error}</p>
+                <p className="text-sm leading-6 text-red-700">
+                  {error}
+                </p>
               </div>
             )}
 
-            {/* Demo Filled */}
-            {demoFilled && !error && (
-              <div className="mb-5 flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            {/* SUCCESS DEMO */}
+            {demoFilled && (
+              <div className="mb-5 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
                 <CheckCircle2
                   size={18}
-                  className="shrink-0"
+                  className="text-emerald-500"
                 />
 
-                <p>
+                <p className="text-sm text-emerald-700">
                   Akun demo berhasil diisi.
                 </p>
               </div>
             )}
 
+            {/* FORM */}
             <form
               onSubmit={handleSubmit}
               className="space-y-5"
             >
-              {/* Username */}
+              {/* IDENTIFIER */}
               <div>
                 <label
-                  htmlFor="username"
+                  htmlFor="identifier"
                   className="mb-2 block text-sm font-medium text-slate-700"
                 >
-                  Username
+                  Email atau Username
                 </label>
 
-                <div className="relative">
-                  <User
-                    size={18}
-                    className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${
-                      focusedField === "username"
-                        ? "text-slate-700"
-                        : "text-slate-400"
-                    }`}
-                  />
+                <div
+                  className={`flex h-12 items-center rounded-xl border bg-white transition ${
+                    focusedField ===
+                    "identifier"
+                      ? "border-indigo-500 ring-4 ring-indigo-500/10"
+                      : "border-slate-200"
+                  }`}
+                >
+                  <div className="flex w-12 items-center justify-center">
+                    <User
+                      size={19}
+                      className={
+                        focusedField ===
+                        "identifier"
+                          ? "text-indigo-600"
+                          : "text-slate-400"
+                      }
+                    />
+                  </div>
 
                   <input
-                    id="username"
+                    id="identifier"
                     type="text"
-                    value={username}
-                    onChange={(event) => {
-                      setUsername(
+                    value={identifier}
+                    onChange={(event) =>
+                      setIdentifier(
                         event.target.value
-                      );
-                      setError("");
-                      setDemoFilled(false);
-                    }}
+                      )
+                    }
                     onFocus={() =>
-                      setFocusedField("username")
+                      setFocusedField(
+                        "identifier"
+                      )
                     }
                     onBlur={() =>
                       setFocusedField(null)
                     }
-                    placeholder="Masukkan username"
+                    placeholder="Masukkan email atau username"
                     autoComplete="username"
                     disabled={loading}
-                    className={`w-full rounded-xl border bg-white py-3 pl-10 pr-4 text-sm text-slate-800 outline-none transition ${
-                      focusedField === "username"
-                        ? "border-slate-400 ring-2 ring-slate-100"
-                        : "border-slate-200"
-                    } placeholder:text-slate-400 disabled:cursor-not-allowed disabled:bg-slate-50`}
+                    className="h-full flex-1 bg-transparent pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </div>
               </div>
 
-              {/* Password */}
+              {/* PASSWORD */}
               <div>
                 <label
                   htmlFor="password"
@@ -224,15 +291,24 @@ export default function LoginPage() {
                   Password
                 </label>
 
-                <div className="relative">
-                  <Lock
-                    size={18}
-                    className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${
-                      focusedField === "password"
-                        ? "text-slate-700"
-                        : "text-slate-400"
-                    }`}
-                  />
+                <div
+                  className={`flex h-12 items-center rounded-xl border bg-white transition ${
+                    focusedField === "password"
+                      ? "border-indigo-500 ring-4 ring-indigo-500/10"
+                      : "border-slate-200"
+                  }`}
+                >
+                  <div className="flex w-12 items-center justify-center">
+                    <Lock
+                      size={19}
+                      className={
+                        focusedField ===
+                        "password"
+                          ? "text-indigo-600"
+                          : "text-slate-400"
+                      }
+                    />
+                  </div>
 
                   <input
                     id="password"
@@ -242,13 +318,11 @@ export default function LoginPage() {
                         : "password"
                     }
                     value={password}
-                    onChange={(event) => {
+                    onChange={(event) =>
                       setPassword(
                         event.target.value
-                      );
-                      setError("");
-                      setDemoFilled(false);
-                    }}
+                      )
+                    }
                     onFocus={() =>
                       setFocusedField("password")
                     }
@@ -258,77 +332,93 @@ export default function LoginPage() {
                     placeholder="Masukkan password"
                     autoComplete="current-password"
                     disabled={loading}
-                    className={`w-full rounded-xl border bg-white py-3 pl-10 pr-11 text-sm text-slate-800 outline-none transition ${
-                      focusedField === "password"
-                        ? "border-slate-400 ring-2 ring-slate-100"
-                        : "border-slate-200"
-                    } placeholder:text-slate-400 disabled:cursor-not-allowed disabled:bg-slate-50`}
+                    className="h-full flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
                   />
 
                   <button
                     type="button"
                     onClick={() =>
                       setShowPassword(
-                        (value) => !value
+                        (current) =>
+                          !current
                       )
                     }
                     disabled={loading}
+                    className="flex h-full w-12 items-center justify-center text-slate-400 transition hover:text-slate-600 disabled:cursor-not-allowed"
                     aria-label={
                       showPassword
                         ? "Sembunyikan password"
                         : "Tampilkan password"
                     }
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {showPassword ? (
-                      <EyeOff size={18} />
+                      <EyeOff size={19} />
                     ) : (
-                      <Eye size={18} />
+                      <Eye size={19} />
                     )}
                   </button>
                 </div>
               </div>
 
-              {/* Submit */}
+              {/* FORGOT PASSWORD */}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="text-sm font-medium text-indigo-600 transition hover:text-indigo-700"
+                >
+                  Lupa password?
+                </button>
+              </div>
+
+              {/* LOGIN BUTTON */}
               <button
                 type="submit"
                 disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition duration-200 hover:bg-slate-800 hover:shadow-sm active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? (
                   <>
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                    Memproses...
+
+                    <span>
+                      Memproses...
+                    </span>
                   </>
                 ) : (
                   <>
                     <LogIn size={18} />
-                    Masuk
+
+                    <span>Masuk</span>
                   </>
                 )}
               </button>
             </form>
 
-            {/* Demo Account */}
-            <div className="mt-6 rounded-xl border border-slate-100 bg-slate-50 p-4">
+            {/* DEMO ACCOUNT */}
+            <div className="mt-8 rounded-xl border border-slate-200 bg-white p-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-semibold text-slate-700">
+                  <p className="text-sm font-semibold text-slate-800">
                     Akun Demo
                   </p>
 
-                  <div className="mt-2 space-y-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Gunakan akun berikut untuk
+                    mencoba aplikasi.
+                  </p>
+
+                  <div className="mt-3 space-y-1 text-xs text-slate-500">
                     <p>
                       Username:{" "}
                       <span className="font-medium text-slate-700">
-                        admin
+                        owner01
                       </span>
                     </p>
 
                     <p>
                       Password:{" "}
                       <span className="font-medium text-slate-700">
-                        admin123
+                        owner123
                       </span>
                     </p>
                   </div>
@@ -336,19 +426,33 @@ export default function LoginPage() {
 
                 <button
                   type="button"
-                  onClick={handleDemoLogin}
+                  onClick={
+                    handleDemoAccount
+                  }
                   disabled={loading}
-                  className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Gunakan
+                  Isi Demo
                 </button>
               </div>
             </div>
-          </div>
 
-          <p className="mt-6 text-center text-xs text-slate-400">
-            © 2026 Kasirfy. All rights reserved.
-          </p>
+            {/* REGISTER */}
+            <p className="mt-8 text-center text-sm text-slate-500">
+              Belum memiliki akun?{" "}
+              <button
+                type="button"
+                onClick={() =>
+                  router.push(
+                    "/register"
+                  )
+                }
+                className="font-medium text-indigo-600 hover:text-indigo-700"
+              >
+                Daftar sekarang
+              </button>
+            </p>
+          </div>
         </div>
       </div>
     </main>

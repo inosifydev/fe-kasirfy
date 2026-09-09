@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Check,
-  ChevronDown,
-  ShieldCheck,
-  Save,
   AlertCircle,
+  Check,
+  ChevronRight,
+  Save,
+  ShieldCheck,
+  Users,
 } from "lucide-react";
 
 import {
@@ -16,25 +17,37 @@ import {
   defaultPermissions,
   getStoredPermissions,
   savePermissions,
-  hasAccess,
 } from "@/lib/permission";
 
-import type {
-  RoleName,
-  AccessType,
-} from "@/lib/permission";
+import type { RoleName, AccessType } from "@/lib/permission";
 
 const accessColors: Record<AccessType, string> = {
   Create:
     "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100",
   Read:
-    "bg-blue-50 text-blue-700 ring-1 ring-blue-200 hover:bg-blue-100",
+    "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100",
   Update:
-    "bg-amber-50 text-amber-700 ring-1 ring-amber-200 hover:bg-amber-100",
+    "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100",
   Delete:
-    "bg-red-50 text-red-700 ring-1 ring-red-200 hover:bg-red-100",
+    "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100",
   Export:
-    "bg-violet-50 text-violet-700 ring-1 ring-violet-200 hover:bg-violet-100",
+    "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100",
+};
+
+const accessLabels: Record<AccessType, string> = {
+  Create: "Tambah",
+  Read: "Lihat",
+  Update: "Ubah",
+  Delete: "Hapus",
+  Export: "Export",
+};
+
+const accessDescriptions: Record<AccessType, string> = {
+  Create: "Bisa menambahkan data baru",
+  Read: "Bisa membuka dan melihat isi menu ini",
+  Update: "Bisa mengubah data yang sudah ada",
+  Delete: "Bisa menghapus atau menonaktifkan data",
+  Export: "Bisa mengekspor data",
 };
 
 type PermissionState = Record<
@@ -44,347 +57,627 @@ type PermissionState = Record<
 
 export default function HakAksesPage() {
   const [selectedRole, setSelectedRole] =
-    useState<RoleName>("Kasir");
+    useState<RoleName>("Owner");
 
-  const [openRole, setOpenRole] =
-    useState(false);
+  const [selectedMenu, setSelectedMenu] =
+    useState<string>("Dashboard");
 
   const [permissions, setPermissions] =
     useState<PermissionState>(defaultPermissions);
 
-  const [saved, setSaved] =
-    useState(false);
+  const [savedPermissions, setSavedPermissions] =
+    useState<PermissionState>(defaultPermissions);
 
-  // Digunakan agar bagian yang membaca localStorage
-  // tidak ikut dirender sebelum hydration selesai.
   const [isHydrated, setIsHydrated] =
     useState(false);
 
+  const [isSaving, setIsSaving] =
+    useState(false);
+
+  const [showSuccess, setShowSuccess] =
+    useState(false);
+
+  const [showError, setShowError] =
+    useState(false);
+
+  /*
+   * Load permission dari localStorage
+   */
   useEffect(() => {
     const stored = getStoredPermissions();
 
     setPermissions(stored);
+    setSavedPermissions(stored);
     setIsHydrated(true);
   }, []);
 
-  const changeRole = (role: RoleName) => {
-    setSelectedRole(role);
-    setOpenRole(false);
+  /*
+   * Menu yang sedang dipilih
+   */
+  const currentMenu = useMemo(() => {
+    return menus.find(
+      (menu) => menu.nama_menu === selectedMenu
+    );
+  }, [selectedMenu]);
+
+  /*
+   * Jumlah permission aktif pada sebuah menu
+   */
+  const getPermissionCount = (
+    roleName: RoleName,
+    menuName: string
+  ) => {
+    return permissions[roleName]?.[menuName]?.length ?? 0;
   };
 
+  /*
+   * Jumlah seluruh permission sebuah role
+   */
+  const getRoleTotalAccess = (
+    roleName: RoleName
+  ) => {
+    return menus.reduce((total, menu) => {
+      return (
+        total +
+        getPermissionCount(
+          roleName,
+          menu.nama_menu
+        )
+      );
+    }, 0);
+  };
+
+  /*
+   * Total permission yang mungkin
+   *
+   * 7 menu x 5 permission = 35
+   */
+  const totalPossibleAccess =
+    menus.length * jenisAkses.length;
+
+  /*
+   * Permission pada menu yang sedang dipilih
+   */
+  const currentMenuPermissions =
+    permissions[selectedRole]?.[selectedMenu] ?? [];
+
+  /*
+   * Mengecek apakah ada perubahan
+   */
+  const hasChanges = useMemo(() => {
+    return (
+      JSON.stringify(permissions) !==
+      JSON.stringify(savedPermissions)
+    );
+  }, [permissions, savedPermissions]);
+
+  /*
+   * Menghitung jumlah perubahan
+   */
+  const changeCount = useMemo(() => {
+    let count = 0;
+
+    roles.forEach((role) => {
+      menus.forEach((menu) => {
+        const current =
+          permissions[role.nama_role as RoleName]?.[
+            menu.nama_menu
+          ] ?? [];
+
+        const saved =
+          savedPermissions[
+            role.nama_role as RoleName
+          ]?.[menu.nama_menu] ?? [];
+
+        jenisAkses.forEach((access) => {
+          const accessName =
+            access.nama_jenis_akses as AccessType;
+
+          const currentActive =
+            current.includes(accessName);
+
+          const savedActive =
+            saved.includes(accessName);
+
+          if (currentActive !== savedActive) {
+            count++;
+          }
+        });
+      });
+    });
+
+    return count;
+  }, [permissions, savedPermissions]);
+
+  /*
+   * Toggle permission
+   */
   const togglePermission = (
     menuName: string,
     accessName: AccessType
   ) => {
-    setPermissions((current) => {
-      const currentAccess =
-        current[selectedRole][menuName] || [];
+    setPermissions((prev) => {
+      const rolePermissions = prev[selectedRole] ?? {};
 
-      const alreadyExists =
-        currentAccess.includes(accessName);
+      const currentPermissions =
+        rolePermissions[menuName] ?? [];
 
-      const updatedAccess = alreadyExists
-        ? currentAccess.filter(
-            (access) => access !== accessName
+      const exists =
+        currentPermissions.includes(accessName);
+
+      const updatedPermissions = exists
+        ? currentPermissions.filter(
+            (item) => item !== accessName
           )
-        : [...currentAccess, accessName];
+        : [...currentPermissions, accessName];
 
       return {
-        ...current,
+        ...prev,
         [selectedRole]: {
-          ...current[selectedRole],
-          [menuName]: updatedAccess,
+          ...rolePermissions,
+          [menuName]: updatedPermissions,
         },
       };
     });
 
-    setSaved(false);
+    setShowSuccess(false);
+    setShowError(false);
   };
 
-  const handleSave = () => {
-    savePermissions(permissions);
+  /*
+   * Simpan permission
+   */
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      setShowSuccess(false);
+      setShowError(false);
 
-    setSaved(true);
+      await new Promise((resolve) =>
+        setTimeout(resolve, 400)
+      );
 
-    setTimeout(() => {
-      setSaved(false);
-    }, 2500);
+      savePermissions(permissions);
+
+      setSavedPermissions(permissions);
+      setShowSuccess(true);
+
+      setTimeout(() => {
+        setShowSuccess(false);
+      }, 2500);
+    } catch (error) {
+      console.error(
+        "Gagal menyimpan permission:",
+        error
+      );
+
+      setShowError(true);
+
+      setTimeout(() => {
+        setShowError(false);
+      }, 3000);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const isPermissionActive = (
-    menuName: string,
-    accessName: AccessType
-  ) => {
-    return (
-      permissions[selectedRole]?.[menuName]?.includes(
-        accessName
-      ) ?? false
-    );
+  /*
+   * Ganti role
+   */
+  const handleSelectRole = (roleName: RoleName) => {
+    setSelectedRole(roleName);
+    setShowSuccess(false);
+    setShowError(false);
+  };
+
+  /*
+   * Ganti menu
+   */
+  const handleSelectMenu = (menuName: string) => {
+    setSelectedMenu(menuName);
+    setShowSuccess(false);
+    setShowError(false);
   };
 
   return (
-    <div className="min-h-full bg-slate-50">
-      <div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-[1500px] space-y-6 p-4 sm:p-6 lg:p-8">
 
-        {/* HEADER */}
-        <div className="mb-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <div className="mb-2 flex items-center gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                  <ShieldCheck size={19} />
+        {/* =====================================================
+            HEADER
+        ====================================================== */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                <ShieldCheck
+                  size={19}
+                  strokeWidth={2}
+                />
+              </div>
+
+              <span className="text-sm font-medium text-indigo-600">
+                Manajemen Akses
+              </span>
+            </div>
+
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              Hak Akses
+            </h1>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Atur hak akses setiap role terhadap menu
+              aplikasi.
+            </p>
+          </div>
+        </div>
+
+        {/* =====================================================
+            MAIN PERMISSION PANEL
+        ====================================================== */}
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+          <div className="grid min-h-[620px] grid-cols-1 lg:grid-cols-[190px_240px_minmax(0,1fr)]">
+
+            {/* =================================================
+                COLUMN 1 — ROLE
+            ================================================== */}
+            <div className="border-b border-slate-200 lg:border-b-0 lg:border-r">
+              <div className="border-b border-slate-200 px-4 py-4">
+                <div className="flex items-center gap-2">
+                  <Users
+                    size={16}
+                    className="text-slate-500"
+                  />
+
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Role
+                  </span>
                 </div>
+              </div>
 
-                <span className="text-sm font-medium text-indigo-600">
-                  Pengaturan Sistem
+              <div className="space-y-1 p-2">
+                {roles.map((role) => {
+                  const roleName =
+                    role.nama_role as RoleName;
+
+                  const isSelected =
+                    selectedRole === roleName;
+
+                  const totalAccess =
+                    getRoleTotalAccess(roleName);
+
+                  return (
+                    <button
+                      key={role.id_role}
+                      type="button"
+                      onClick={() =>
+                        handleSelectRole(roleName)
+                      }
+                      className={`
+                        group flex w-full items-center justify-between
+                        rounded-lg px-3 py-2.5 text-left
+                        transition-all duration-150
+                        ${
+                          isSelected
+                            ? "bg-indigo-50 text-indigo-700"
+                            : "text-slate-700 hover:bg-slate-50"
+                        }
+                      `}
+                    >
+                      <div className="min-w-0">
+                        <p
+                          className={`
+                            truncate text-sm font-medium
+                            ${
+                              isSelected
+                                ? "text-indigo-700"
+                                : "text-slate-700"
+                            }
+                          `}
+                        >
+                          {role.nama_role}
+                        </p>
+
+                        <p
+                          className={`
+                            mt-0.5 text-[11px]
+                            ${
+                              isSelected
+                                ? "text-indigo-500"
+                                : "text-slate-400"
+                            }
+                          `}
+                        >
+                          {totalAccess}/
+                          {totalPossibleAccess} akses
+                        </p>
+                      </div>
+
+                      <ChevronRight
+                        size={15}
+                        className={`
+                          shrink-0 transition-transform
+                          ${
+                            isSelected
+                              ? "translate-x-0 text-indigo-500"
+                              : "text-slate-300 group-hover:translate-x-0.5 group-hover:text-slate-400"
+                          }
+                        `}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* =================================================
+                COLUMN 2 — MENU
+            ================================================== */}
+            <div className="border-b border-slate-200 lg:border-b-0 lg:border-r">
+              <div className="border-b border-slate-200 px-4 py-4">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Menu
                 </span>
               </div>
 
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                Hak Akses
-              </h1>
+              <div className="space-y-1 p-2">
+                {menus.map((menu) => {
+                  const count =
+                    getPermissionCount(
+                      selectedRole,
+                      menu.nama_menu
+                    );
 
-              <p className="mt-1 text-sm text-slate-500">
-                Atur hak akses setiap role terhadap menu dan fitur
-                aplikasi.
-              </p>
+                  const isSelected =
+                    selectedMenu ===
+                    menu.nama_menu;
+
+                  return (
+                    <button
+                    key={menu.id_menu}
+                    type="button"
+                    onClick={() =>
+                      handleSelectMenu(menu.nama_menu)
+                    }
+                    className={`
+                      flex w-full items-center justify-between
+                      rounded-lg px-3 py-2.5 text-left
+                      transition-all duration-150
+                      ${
+                        isSelected
+                          ? "bg-indigo-50 text-indigo-700"
+                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-800"
+                      }
+                    `}
+                  >
+                      <span
+                        className={`
+                          truncate text-sm
+                          ${
+                            isSelected
+                            ? "text-indigo-700"
+                            : "text-slate-500"
+                          }
+                        `}
+                      >
+                        {menu.nama_menu}
+                      </span>
+
+                      <span
+                        className={`
+                          ml-3 shrink-0 rounded-lg px-2.5 py-1
+                          text-sm font-normal
+                          ${
+                            count === jenisAkses.length
+                              ? "bg-emerald-50 text-emerald-00"
+                              : count > 0
+                              ? "bg-slate-100 text-slate-600"
+                              : "bg-slate-100 text-slate-500"
+                          }
+                        `}
+                      >
+                        {count}/{jenisAkses.length}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* ROLE SELECTOR */}
-            <div className="relative w-full sm:w-[220px]">
-              <button
-                type="button"
-                onClick={() =>
-                  setOpenRole((current) => !current)
-                }
-                className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm outline-none transition-all duration-200 hover:border-slate-300 hover:shadow-md focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
-              >
-                <div>
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">
-                    Role aktif
-                  </p>
+            {/* =================================================
+                COLUMN 3 — PERMISSION
+            ================================================== */}
+            <div className="flex min-w-0 flex-col">
 
-                  <p className="mt-0.5 text-sm font-semibold text-slate-800">
-                    {selectedRole}
-                  </p>
+              {/* Header */}
+              <div className="border-b border-slate-200 px-5 py-4 sm:px-6">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      <span className="text-indigo-600">
+                        {selectedRole}
+                      </span>
+                      <span className="mx-1 text-slate-300">
+                        ·
+                      </span>
+                      {currentMenu?.nama_menu ??
+                        selectedMenu}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-400">
+                      Atur permission yang dapat
+                      digunakan oleh role ini.
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500">
+                    {currentMenuPermissions.length}/
+                    {jenisAkses.length} akses
+                  </div>
                 </div>
+              </div>
 
-                <ChevronDown
-                  size={18}
-                  className={`text-slate-400 transition-transform duration-200 ${
-                    openRole ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
+              {/* Permission List */}
+              <div className="flex-1 px-5 sm:px-6">
+                {jenisAkses.map((access) => {
+                  const accessName =
+                    access.nama_jenis_akses as AccessType;
 
-              {openRole && (
-                <div className="absolute right-0 top-full z-50 mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
-                  {roles.map((role) => {
-                    const active =
-                      role.nama_role === selectedRole;
+                  const isActive =
+                    currentMenuPermissions.includes(
+                      accessName
+                    );
 
-                    return (
+                  return (
+                    <div
+                      key={access.id_jenis_akses}
+                      className="flex items-center justify-between gap-4 border-b border-slate-100 py-4 last:border-b-0"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-800">
+                          {accessLabels[accessName]}
+                        </p>
+
+                        <p className="mt-1 text-xs leading-5 text-slate-400">
+                          {
+                            accessDescriptions[
+                              accessName
+                            ]
+                          }
+                        </p>
+                      </div>
+
                       <button
-                        key={role.id_role}
                         type="button"
                         onClick={() =>
-                          changeRole(
-                            role.nama_role as RoleName
+                          togglePermission(
+                            selectedMenu,
+                            accessName
                           )
                         }
-                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors ${
-                          active
-                            ? "bg-indigo-50 font-semibold text-indigo-700"
-                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                        }`}
+                        className={`
+                          shrink-0 rounded-lg px-3 py-2
+                          text-xs font-semibold
+                          transition-all duration-150
+                          ${
+                            isActive
+                              ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100"
+                              : "bg-red-50 text-red-600 ring-1 ring-red-200 hover:bg-red-100"
+                          }
+                        `}
                       >
-                        <div className="text-left">
-                          <p className="font-medium">
-                            {role.nama_role}
-                          </p>
+                        <span className="flex items-center gap-1.5">
+                          {isActive && (
+                            <Check size={13} />
+                          )}
 
-                          <p className="mt-0.5 text-xs text-slate-400">
-                            {role.deskripsi}
-                          </p>
-                        </div>
-
-                        {active && (
-                          <Check
-                            size={16}
-                            className="text-indigo-600"
-                          />
-                        )}
+                          {isActive
+                            ? "Diizinkan"
+                            : "Ditolak"}
+                        </span>
                       </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* PERMISSION CARD */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-
-          {/* CARD HEADER */}
-          <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">
-                  Permission {selectedRole}
-                </h2>
-
-                <p className="mt-1 text-xs text-slate-500">
-                  Tentukan operasi yang dapat dilakukan pada
-                  setiap menu.
-                </p>
+                    </div>
+                  );
+                })}
               </div>
 
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <span className="h-2 w-2 rounded-full bg-indigo-500" />
-                {menus.length} menu
-              </div>
-            </div>
-          </div>
+              {/* Footer */}
+              <div className="border-t border-slate-200 bg-slate-50/70 px-5 py-4 sm:px-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
-          {/* TABLE */}
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[850px] border-collapse">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/70">
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Menu
-                  </th>
+                  <div className="text-xs">
+                    {hasChanges ? (
+                      <span className="text-slate-500">
+                        <span className="font-semibold text-slate-700">
+                          {changeCount}
+                        </span>{" "}
+                        perubahan belum disimpan
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">
+                        Semua perubahan sudah disimpan
+                      </span>
+                    )}
+                  </div>
 
-                  {jenisAkses.map((akses) => (
-                    <th
-                      key={akses.id_jenis_akses}
-                      className="px-4 py-4 text-center text-xs font-semibold uppercase tracking-wider text-slate-500"
-                    >
-                      {akses.nama_jenis_akses}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-
-              <tbody>
-                {menus.map((menu) => (
-                  <tr
-                    key={menu.id_menu}
-                    className="border-b border-slate-100 transition-colors last:border-b-0 hover:bg-indigo-50/20"
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={
+                      !hasChanges || isSaving
+                    }
+                    className={`
+                      inline-flex items-center justify-center
+                      gap-2 rounded-lg px-4 py-2.5
+                      text-sm font-semibold
+                      transition-all duration-200
+                      ${
+                        hasChanges && !isSaving
+                          ? "bg-slate-800 text-white shadow-sm hover:bg-slate-900"
+                          : "cursor-not-allowed bg-slate-200 text-slate-400"
+                      }
+                    `}
                   >
-                    {/* MENU */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
-                          <ShieldCheck size={16} />
-                        </div>
-
-                        <div>
-                          <p className="text-sm font-semibold text-slate-800">
-                            {menu.nama_menu}
-                          </p>
-
-                          <p className="mt-0.5 text-xs text-slate-400">
-                            {menu.kode_menu}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* ACCESS */}
-                    {jenisAkses.map((akses) => {
-                      const accessName =
-                        akses.nama_jenis_akses as AccessType;
-
-                      const active =
-                        isPermissionActive(
-                          menu.nama_menu,
-                          accessName
-                        );
-
-                      return (
-                        <td
-                          key={akses.id_jenis_akses}
-                          className="px-4 py-4 text-center"
-                        >
-                          <button
-                            type="button"
-                            onClick={() =>
-                              togglePermission(
-                                menu.nama_menu,
-                                accessName
-                              )
-                            }
-                            className={`inline-flex min-w-[78px] items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200 ${
-                              active
-                                ? accessColors[accessName]
-                                : "bg-slate-50 text-slate-300 ring-1 ring-slate-200 hover:bg-slate-100 hover:text-slate-500"
-                            }`}
-                          >
-                            {active && (
-                              <Check size={13} />
-                            )}
-
-                            {active
-                              ? "Diizinkan"
-                              : "Ditolak"}
-                          </button>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* FOOTER */}
-          <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <div className="text-xs text-slate-400">
-              Perubahan belum tersimpan sampai tombol
-              <span className="font-medium text-slate-600">
-                {" "}
-                Simpan Perubahan
-              </span>{" "}
-              ditekan.
+                    {isSaving ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+                        Menyimpan...
+                      </>
+                    ) : (
+                      <>
+                        <Save size={15} />
+                        Simpan perubahan
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
-
-            <button
-              type="button"
-              onClick={handleSave}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-indigo-700 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-200 active:scale-[0.98]"
-            >
-              <Save size={16} />
-
-              Simpan Perubahan
-            </button>
           </div>
         </div>
 
-        {/* ACCESS LEGEND */}
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {/* =====================================================
+            LEGEND
+        ====================================================== */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-sm font-semibold text-slate-900">
-              Keterangan Hak Akses
+            <h2 className="text-sm font-semibold text-slate-800">
+              Jenis akses
             </h2>
 
-            <p className="mt-1 text-xs text-slate-500">
-              Jenis operasi yang tersedia dalam sistem.
+            <p className="mt-1 text-xs text-slate-400">
+              Setiap menu memiliki lima jenis permission.
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            {jenisAkses.map((akses) => {
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {jenisAkses.map((access) => {
               const accessName =
-                akses.nama_jenis_akses as AccessType;
+                access.nama_jenis_akses as AccessType;
 
               return (
                 <div
-                  key={akses.id_jenis_akses}
-                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${accessColors[accessName]}`}
+                  key={access.id_jenis_akses}
+                  className="rounded-xl border border-slate-100 bg-slate-50 p-3"
                 >
-                  <span>{accessName}</span>
+                  <div
+                    className={`
+                      mb-2 inline-flex rounded-lg px-2.5 py-1
+                      text-xs font-semibold
+                      ${accessColors[accessName]}
+                    `}
+                  >
+                    {accessLabels[accessName]}
+                  </div>
+
+                  <p className="text-xs leading-5 text-slate-500">
+                    {
+                      accessDescriptions[
+                        accessName
+                      ]
+                    }
+                  </p>
                 </div>
               );
             })}
@@ -392,164 +685,109 @@ export default function HakAksesPage() {
         </div>
 
         {/* =====================================================
-            PERMISSION DEBUG
-            Hanya dirender setelah hydration selesai.
-            Ini mencegah hydration mismatch karena hasAccess()
-            membaca localStorage.
+            TEMPORARY DEBUG
         ====================================================== */}
         {isHydrated && (
-          <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-start gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <AlertCircle
+                size={15}
+                className="text-slate-400"
+              />
+
+              <h2 className="text-sm font-semibold text-slate-700">
+                Permission Debug
+              </h2>
+            </div>
+
+            <div className="grid gap-2 text-xs text-slate-500 sm:grid-cols-3">
+              <div>
+                <span className="text-slate-400">
+                  Role aktif:
+                </span>{" "}
+                <span className="font-semibold text-slate-700">
+                  {selectedRole}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-slate-400">
+                  Menu aktif:
+                </span>{" "}
+                <span className="font-semibold text-slate-700">
+                  {selectedMenu}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-slate-400">
+                  Permission:
+                </span>{" "}
+                <span className="font-semibold text-slate-700">
+                  {currentMenuPermissions.length}/
+                  {jenisAkses.length}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-lg bg-slate-50 p-3 font-mono text-[11px] text-slate-500">
+              {JSON.stringify(
+                currentMenuPermissions,
+                null,
+                2
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================
+            TOAST SUCCESS
+        ====================================================== */}
+        {showSuccess && (
+          <div className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2">
+            <div className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-lg ring-1 ring-slate-200">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                <Check size={17} />
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold text-slate-800">
+                  Berhasil disimpan
+                </p>
+
+                <p className="text-xs text-slate-400">
+                  Perubahan hak akses telah
+                  disimpan.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================
+            TOAST ERROR
+        ====================================================== */}
+        {showError && (
+          <div className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2">
+            <div className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-lg ring-1 ring-slate-200">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-50 text-red-600">
                 <AlertCircle size={17} />
               </div>
 
               <div>
-                <h2 className="text-sm font-semibold text-slate-900">
-                  Permission Debug
-                </h2>
+                <p className="text-sm font-semibold text-slate-800">
+                  Gagal menyimpan
+                </p>
 
-                <p className="mt-1 text-xs text-slate-500">
-                  Bagian ini digunakan sementara untuk memastikan
-                  pengecekan hak akses dan localStorage bekerja
-                  dengan benar.
+                <p className="text-xs text-slate-400">
+                  Terjadi kesalahan saat menyimpan
+                  perubahan.
                 </p>
               </div>
             </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-
-              {/* KASIR - BARANG READ */}
-              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                <p className="text-xs font-medium text-slate-500">
-                  Kasir
-                </p>
-
-                <p className="mt-1 text-sm font-semibold text-slate-800">
-                  Data Barang
-                </p>
-
-                <div className="mt-3">
-                  {hasAccess(
-                    "Kasir",
-                    "Data Barang",
-                    "Read"
-                  ) ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                      <Check size={13} />
-                      Diizinkan
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 ring-1 ring-red-200">
-                      ✕ Ditolak
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* KASIR - BARANG CREATE */}
-              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                <p className="text-xs font-medium text-slate-500">
-                  Kasir
-                </p>
-
-                <p className="mt-1 text-sm font-semibold text-slate-800">
-                  Data Barang
-                </p>
-
-                <div className="mt-3">
-                  {hasAccess(
-                    "Kasir",
-                    "Data Barang",
-                    "Create"
-                  ) ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                      <Check size={13} />
-                      Diizinkan
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 ring-1 ring-red-200">
-                      ✕ Ditolak
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* MANAGER - BARANG CREATE */}
-              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                <p className="text-xs font-medium text-slate-500">
-                  Manager
-                </p>
-
-                <p className="mt-1 text-sm font-semibold text-slate-800">
-                  Data Barang
-                </p>
-
-                <div className="mt-3">
-                  {hasAccess(
-                    "Manager",
-                    "Data Barang",
-                    "Create"
-                  ) ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                      <Check size={13} />
-                      Diizinkan
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 ring-1 ring-red-200">
-                      ✕ Ditolak
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* OWNER - HAK AKSES DELETE */}
-              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                <p className="text-xs font-medium text-slate-500">
-                  Owner
-                </p>
-
-                <p className="mt-1 text-sm font-semibold text-slate-800">
-                  Hak Akses
-                </p>
-
-                <div className="mt-3">
-                  {hasAccess(
-                    "Owner",
-                    "Hak Akses",
-                    "Delete"
-                  ) ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                      <Check size={13} />
-                      Diizinkan
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 ring-1 ring-red-200">
-                      ✕ Ditolak
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </section>
+          </div>
         )}
       </div>
-
-      {/* SUCCESS TOAST */}
-      {saved && (
-        <div className="pointer-events-none fixed bottom-6 left-1/2 z-[200] -translate-x-1/2 animate-in fade-in slide-in-from-bottom-3 duration-300 ease-out">
-          <div className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-lg ring-1 ring-white/10">
-            <Check
-              size={16}
-              className="shrink-0 text-emerald-400"
-            />
-
-            <span>
-              Hak akses berhasil disimpan.
-            </span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
