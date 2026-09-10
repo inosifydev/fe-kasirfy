@@ -66,7 +66,7 @@ export const menus: Menu[] = [
     nama_menu: "Hak Akses",
     kode_menu: "hak_akses",
     icon: "ShieldCheck",
-    path: "/api/v1/hak-akses",
+    path: "/hak-akses",
     urutan: 7,
     is_active: true,
     created_at: "2026-01-01T00:00:00.000Z",

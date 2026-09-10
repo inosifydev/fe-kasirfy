@@ -27,3 +27,14 @@ export interface AuthSession {
   id_role: string;
   role: Role;
 }
+
+export interface Permission {
+  id_permission?: string;
+  module: string;
+  access: string;
+}
+
+export interface AuthPermissions {
+  role: string;
+  permissions: Permission[];
+}

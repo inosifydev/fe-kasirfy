@@ -1,7 +1,6 @@
 import { AuthSession, Role } from "@/features/user/types";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export interface LoginPayload {
   identifier: string;
@@ -154,12 +153,10 @@ export async function login(
      * Profile merupakan sumber data user yang lebih lengkap.
      */
     const profile = await getProfile();
-
     if (!profile) {
-      return {
-        success: false,
-        message: "Gagal mengambil profile pengguna.",
-      };
+      return { success: false, message: "Gagal mengambil profile pengguna." };
+      // ← cookie access_token & refresh_token SUDAH ke-set di browser dari step login,
+      //   tapi function ini bilang "gagal". User jadi "login setengah jalan".
     }
 
     /*
