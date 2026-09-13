@@ -17,150 +17,11 @@ import {
 
 import { getSession } from "@/lib/auth";
 import type { AuthSession } from "@/features/user/types";
-
-/* =========================
-   TYPES
-========================= */
-
-interface RecentTransaction {
-  id_transaksi: string;
-  nama_kasir: string;
-  total_harga: number;
-  status: string;
-  tanggal_transaksi: string;
-}
-
-interface LowStockProduct {
-  id_barang: string;
-  nama_barang: string;
-  stok: number;
-  satuan: string;
-}
-
-interface SalesData {
-  hari: string;
-  nilai: number;
-}
-
-/* =========================
-   DUMMY DATA
-========================= */
-
-const recentTransactions: RecentTransaction[] = [
-  {
-    id_transaksi: "#INV-001",
-    nama_kasir: "Administrator",
-    total_harga: 25000,
-    status: "Selesai",
-    tanggal_transaksi: "Hari ini, 14:32",
-  },
-  {
-    id_transaksi: "#INV-002",
-    nama_kasir: "Administrator",
-    total_harga: 18000,
-    status: "Selesai",
-    tanggal_transaksi: "Hari ini, 13:18",
-  },
-  {
-    id_transaksi: "#INV-003",
-    nama_kasir: "Administrator",
-    total_harga: 42000,
-    status: "Selesai",
-    tanggal_transaksi: "Hari ini, 11:45",
-  },
-  {
-    id_transaksi: "#INV-004",
-    nama_kasir: "Administrator",
-    total_harga: 10000,
-    status: "Selesai",
-    tanggal_transaksi: "Kemarin, 19:21",
-  },
-];
-
-const lowStockProducts: LowStockProduct[] = [
-  {
-    id_barang: "1",
-    nama_barang: "Susu Ultra Milk",
-    stok: 8,
-    satuan: "kotak",
-  },
-  {
-    id_barang: "2",
-    nama_barang: "Sabun Lifebuoy",
-    stok: 4,
-    satuan: "pcs",
-  },
-];
-
-/* =========================
-   SALES DATA - 7 HARI
-========================= */
-
-const sales7Days: SalesData[] = [
-  {
-    hari: "Sen",
-    nilai: 45000,
-  },
-  {
-    hari: "Sel",
-    nilai: 68000,
-  },
-  {
-    hari: "Rab",
-    nilai: 52000,
-  },
-  {
-    hari: "Kam",
-    nilai: 85000,
-  },
-  {
-    hari: "Jum",
-    nilai: 72000,
-  },
-  {
-    hari: "Sab",
-    nilai: 95000,
-  },
-  {
-    hari: "Min",
-    nilai: 0,
-  },
-];
-
-/* =========================
-   SALES DATA - 30 HARI
-========================= */
-
-const sales30Days: SalesData[] = [
-  {
-    hari: "1",
-    nilai: 25000,
-  },
-  {
-    hari: "5",
-    nilai: 48000,
-  },
-  {
-    hari: "10",
-    nilai: 32000,
-  },
-  {
-    hari: "15",
-    nilai: 75000,
-  },
-  {
-    hari: "20",
-    nilai: 56000,
-  },
-  {
-    hari: "25",
-    nilai: 92000,
-  },
-  {
-    hari: "30",
-    nilai: 68000,
-  },
-];
+import {
+  getDashboardData,
+  type DashboardData,
+  type DashboardSalesData,
+} from "@/services/dashboard.service";
 
 /* =========================
    MAIN COMPONENT
@@ -169,37 +30,133 @@ const sales30Days: SalesData[] = [
 export default function DashboardPage() {
   const router = useRouter();
 
-  const [user, setUser] = useState<AuthSession | null>(null);
+  const [user, setUser] =
+    useState<AuthSession | null>(null);
 
-  const [period, setPeriod] = useState<"7" | "30">("7");
+  const [dashboard, setDashboard] =
+    useState<DashboardData | null>(null);
 
-  const [activeStat, setActiveStat] = useState<string | null>(
-    null
-  );
+  const [period, setPeriod] =
+    useState<"7" | "30">("7");
+
+  const [activeStat, setActiveStat] =
+    useState<string | null>(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState<string | null>(null);
 
   /* =========================
-     SESSION
+     SESSION + DASHBOARD DATA
   ========================= */
 
   useEffect(() => {
-    const session = getSession();
+    let mounted = true;
 
-    if (!session) {
-      router.replace("/login");
-      return;
+    async function loadDashboard() {
+      const session = getSession();
+
+      if (!session) {
+        router.replace("/login");
+        return;
+      }
+
+      if (!mounted) return;
+
+      setUser(session);
+      setLoading(true);
+      setError(null);
+
+      try {
+        const data =
+          await getDashboardData();
+
+        if (!mounted) return;
+
+        setDashboard(data);
+      } catch (err) {
+        console.error(
+          "Dashboard error:",
+          err
+        );
+
+        if (!mounted) return;
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Gagal memuat data dashboard."
+        );
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
     }
 
-    setUser(session);
+    loadDashboard();
+
+    return () => {
+      mounted = false;
+    };
   }, [router]);
 
   /* =========================
-     LOADING
+     INITIAL LOADING
   ========================= */
 
-  if (!user) {
+  if (!user || loading) {
     return (
-      <div className="flex min-h-[calc(100vh-64px)] items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900" />
+      <div className="flex min-h-[calc(100vh-64px)] items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-600" />
+
+          <p className="text-sm text-slate-400">
+            Memuat dashboard...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  /* =========================
+     ERROR
+  ========================= */
+
+  if (error || !dashboard) {
+    return (
+      <div className="min-h-[calc(100vh-64px)] bg-slate-50 p-4 sm:p-6 lg:p-8">
+        <div className="mx-auto flex min-h-[400px] max-w-[1600px] items-center justify-center">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-red-50">
+              <AlertTriangle
+                size={22}
+                className="text-red-500"
+              />
+            </div>
+
+            <h2 className="mt-4 text-base font-semibold text-slate-900">
+              Gagal memuat dashboard
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              {error ??
+                "Data dashboard tidak dapat dimuat."}
+            </p>
+
+            <button
+              type="button"
+              onClick={() =>
+                window.location.reload()
+              }
+              className="mt-5 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+            >
+              Coba lagi
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -208,37 +165,160 @@ export default function DashboardPage() {
      HELPERS
   ========================= */
 
-  const formatRupiah = (value: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      maximumFractionDigits: 0,
-    }).format(value);
+  const formatRupiah = (
+    value: number
+  ) => {
+    return new Intl.NumberFormat(
+      "id-ID",
+      {
+        style: "currency",
+        currency: "IDR",
+        maximumFractionDigits: 0,
+      }
+    ).format(value);
   };
 
-  const currentDate = new Intl.DateTimeFormat("id-ID", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(new Date());
+  const formatDate = (
+    dateString: string
+  ) => {
+    const date =
+      new Date(dateString);
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return "-";
+    }
+
+    const now = new Date();
+
+    const dateKey =
+      `${date.getFullYear()}-${String(
+        date.getMonth() + 1
+      ).padStart(2, "0")}-${String(
+        date.getDate()
+      ).padStart(2, "0")}`;
+
+    const todayKey =
+      `${now.getFullYear()}-${String(
+        now.getMonth() + 1
+      ).padStart(2, "0")}-${String(
+        now.getDate()
+      ).padStart(2, "0")}`;
+
+    const yesterday =
+      new Date(now);
+
+    yesterday.setDate(
+      yesterday.getDate() - 1
+    );
+
+    const yesterdayKey =
+      `${yesterday.getFullYear()}-${String(
+        yesterday.getMonth() + 1
+      ).padStart(2, "0")}-${String(
+        yesterday.getDate()
+      ).padStart(2, "0")}`;
+
+    const time =
+      new Intl.DateTimeFormat(
+        "id-ID",
+        {
+          hour: "2-digit",
+          minute: "2-digit",
+        }
+      ).format(date);
+
+    if (dateKey === todayKey) {
+      return `Hari ini, ${time}`;
+    }
+
+    if (
+      dateKey === yesterdayKey
+    ) {
+      return `Kemarin, ${time}`;
+    }
+
+    return new Intl.DateTimeFormat(
+      "id-ID",
+      {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }
+    ).format(date);
+  };
+
+  const formatStatus = (
+    status: string
+  ) => {
+    if (!status) {
+      return "-";
+    }
+
+    return (
+      status.charAt(0).toUpperCase() +
+      status.slice(1)
+    );
+  };
+
+  const currentDate =
+    new Intl.DateTimeFormat(
+      "id-ID",
+      {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }
+    ).format(new Date());
+
+  /* =========================
+     STATISTICS
+  ========================= */
+
+  const {
+    totalPenjualanHariIni,
+    totalTransaksiHariIni,
+    totalBarang,
+    totalPenggunaAktif,
+  } = dashboard.statistics;
 
   /* =========================
      SALES
   ========================= */
 
   const salesData =
-    period === "7" ? sales7Days : sales30Days;
+    period === "7"
+      ? dashboard.sales7Days
+      : dashboard.sales30Days;
 
-  const totalSales = salesData.reduce(
-    (total, item) => total + item.nilai,
-    0
-  );
+  const totalSales =
+    salesData.reduce(
+      (total, item) =>
+        total + item.nilai,
+      0
+    );
+
+  /* =========================
+     DATA
+  ========================= */
+
+  const recentTransactions =
+    dashboard.recentTransactions;
+
+  const lowStockProducts =
+    dashboard.lowStockProducts;
 
   /* =========================
      STAT CLICK
   ========================= */
 
-  const handleStatClick = (title: string) => {
+  const handleStatClick = (
+    title: string
+  ) => {
     setActiveStat(title);
 
     if (title === "Barang") {
@@ -248,6 +328,11 @@ export default function DashboardPage() {
 
     if (title === "Transaksi") {
       router.push("/transaksi");
+      return;
+    }
+
+    if (title === "Pengguna") {
+      router.push("/pengguna");
       return;
     }
   };
@@ -303,54 +388,82 @@ export default function DashboardPage() {
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <DashboardCard
             title="Penjualan"
-            value="Rp 0"
+            value={formatRupiah(
+              totalPenjualanHariIni
+            )}
             description="Hari ini"
             icon={Wallet}
             iconClass="bg-emerald-50 text-emerald-600"
             hoverClass="hover:border-emerald-200"
             onClick={() =>
-              handleStatClick("Penjualan")
+              handleStatClick(
+                "Penjualan"
+              )
             }
-            active={activeStat === "Penjualan"}
+            active={
+              activeStat ===
+              "Penjualan"
+            }
           />
 
           <DashboardCard
             title="Transaksi"
-            value="0"
+            value={String(
+              totalTransaksiHariIni
+            )}
             description="Hari ini"
             icon={ShoppingCart}
             iconClass="bg-blue-50 text-blue-600"
             hoverClass="hover:border-blue-200"
             onClick={() =>
-              handleStatClick("Transaksi")
+              handleStatClick(
+                "Transaksi"
+              )
             }
-            active={activeStat === "Transaksi"}
+            active={
+              activeStat ===
+              "Transaksi"
+            }
           />
 
           <DashboardCard
             title="Barang"
-            value="9"
+            value={String(
+              totalBarang
+            )}
             description="Terdaftar"
             icon={Package}
             iconClass="bg-orange-50 text-orange-600"
             hoverClass="hover:border-orange-200"
             onClick={() =>
-              handleStatClick("Barang")
+              handleStatClick(
+                "Barang"
+              )
             }
-            active={activeStat === "Barang"}
+            active={
+              activeStat ===
+              "Barang"
+            }
           />
 
           <DashboardCard
             title="Pengguna"
-            value="0"
+            value={String(
+              totalPenggunaAktif
+            )}
             description="Aktif"
             icon={Users}
             iconClass="bg-violet-50 text-violet-600"
             hoverClass="hover:border-violet-200"
             onClick={() =>
-              handleStatClick("Pengguna")
+              handleStatClick(
+                "Pengguna"
+              )
             }
-            active={activeStat === "Pengguna"}
+            active={
+              activeStat ===
+              "Pengguna"
+            }
           />
         </section>
 
@@ -391,7 +504,9 @@ export default function DashboardPage() {
               <div className="flex w-fit items-center rounded-lg bg-slate-100 p-1">
                 <button
                   type="button"
-                  onClick={() => setPeriod("7")}
+                  onClick={() =>
+                    setPeriod("7")
+                  }
                   className={`rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
                     period === "7"
                       ? "bg-white text-indigo-600 shadow-sm"
@@ -403,7 +518,9 @@ export default function DashboardPage() {
 
                 <button
                   type="button"
-                  onClick={() => setPeriod("30")}
+                  onClick={() =>
+                    setPeriod("30")
+                  }
                   className={`rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
                     period === "30"
                       ? "bg-white text-indigo-600 shadow-sm"
@@ -419,7 +536,9 @@ export default function DashboardPage() {
 
             <div className="px-5 pb-2 sm:px-6">
               <p className="text-2xl font-bold tracking-tight text-indigo-600">
-                {formatRupiah(totalSales)}
+                {formatRupiah(
+                  totalSales
+                )}
               </p>
 
               <p className="mt-1 text-xs text-slate-400">
@@ -433,7 +552,9 @@ export default function DashboardPage() {
               <SalesChart
                 key={period}
                 data={salesData}
-                formatRupiah={formatRupiah}
+                formatRupiah={
+                  formatRupiah
+                }
               />
             </div>
           </div>
@@ -471,9 +592,12 @@ export default function DashboardPage() {
                   className="text-amber-600"
                 />
 
-                {lowStockProducts.length > 0 && (
+                {lowStockProducts.length >
+                  0 && (
                   <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-semibold text-white">
-                    {lowStockProducts.length}
+                    {
+                      lowStockProducts.length
+                    }
                   </span>
                 )}
               </div>
@@ -481,64 +605,104 @@ export default function DashboardPage() {
 
             {/* PRODUCTS */}
 
-            <div className="divide-y divide-slate-100">
-              {lowStockProducts.map((product) => (
-                <button
-                  key={product.id_barang}
-                  type="button"
-                  onClick={() => router.push("/barang")}
-                  className="group flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-amber-50/40 sm:px-6"
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 transition group-hover:bg-orange-100">
-                      <Package
-                        size={16}
-                        className="text-orange-500"
-                      />
-                    </div>
+            {lowStockProducts.length >
+            0 ? (
+              <div className="divide-y divide-slate-100">
+                {lowStockProducts.map(
+                  (product) => (
+                    <button
+                      key={
+                        product.id_barang
+                      }
+                      type="button"
+                      onClick={() =>
+                        router.push(
+                          "/barang"
+                        )
+                      }
+                      className="group flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-amber-50/40 sm:px-6"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 transition group-hover:bg-orange-100">
+                          <Package
+                            size={16}
+                            className="text-orange-500"
+                          />
+                        </div>
 
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-800">
-                        {product.nama_barang}
-                      </p>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-800">
+                            {
+                              product.nama_barang
+                            }
+                          </p>
 
-                      <p className="mt-1 text-xs text-slate-400">
-                        Stok tersisa
-                      </p>
-                    </div>
-                  </div>
+                          <p className="mt-1 text-xs text-slate-400">
+                            Stok tersisa
+                          </p>
+                        </div>
+                      </div>
 
-                  <div className="flex shrink-0 items-center gap-3">
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-orange-600">
-                        {product.stok}
-                      </p>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-orange-600">
+                            {
+                              product.stok
+                            }
+                          </p>
 
-                      <p className="text-[11px] text-slate-400">
-                        {product.satuan}
-                      </p>
-                    </div>
+                          <p className="text-[11px] text-slate-400">
+                            {
+                              product.satuan
+                            }
+                          </p>
+                        </div>
 
-                    <ArrowRight
-                      size={15}
-                      className="text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-orange-500"
-                    />
-                  </div>
-                </button>
-              ))}
-            </div>
+                        <ArrowRight
+                          size={15}
+                          className="text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-orange-500"
+                        />
+                      </div>
+                    </button>
+                  )
+                )}
+              </div>
+            ) : (
+              <div className="flex min-h-[180px] flex-col items-center justify-center px-5 text-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
+                  <CheckCircle2
+                    size={19}
+                    className="text-emerald-600"
+                  />
+                </div>
+
+                <p className="mt-3 text-sm font-medium text-slate-700">
+                  Semua stok aman
+                </p>
+
+                <p className="mt-1 text-xs text-slate-400">
+                  Tidak ada barang dengan stok menipis.
+                </p>
+              </div>
+            )}
 
             {/* FOOTER */}
 
             <div className="border-t border-slate-100 px-5 py-3 sm:px-6">
               <button
                 type="button"
-                onClick={() => router.push("/barang")}
+                onClick={() =>
+                  router.push(
+                    "/barang"
+                  )
+                }
                 className="flex items-center gap-1 text-xs font-medium text-orange-600 transition hover:text-orange-700"
               >
                 Kelola stok barang
 
-                <ArrowUpRight size={13} />
+                <ArrowUpRight
+                  size={13}
+                />
               </button>
             </div>
           </div>
@@ -573,7 +737,11 @@ export default function DashboardPage() {
 
             <button
               type="button"
-              onClick={() => router.push("/transaksi")}
+              onClick={() =>
+                router.push(
+                  "/transaksi"
+                )
+              }
               className="group flex items-center gap-1 text-xs font-medium text-blue-600 transition hover:text-blue-700"
             >
               Lihat semua
@@ -590,103 +758,120 @@ export default function DashboardPage() {
           ===================================== */}
 
           <div className="hidden overflow-x-auto md:block">
-            <table className="w-full">
-              <thead>
-                <tr className="border-y border-slate-100 bg-slate-50/70">
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400">
-                    ID Transaksi
-                  </th>
+            {recentTransactions.length >
+            0 ? (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-y border-slate-100 bg-slate-50/70">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400">
+                      ID Transaksi
+                    </th>
 
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400">
-                    Kasir
-                  </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400">
+                      Kasir
+                    </th>
 
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400">
-                    Waktu
-                  </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400">
+                      Waktu
+                    </th>
 
-                  <th className="px-6 py-3 text-right text-xs font-medium text-slate-400">
-                    Total
-                  </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-400">
+                      Total
+                    </th>
 
-                  <th className="px-6 py-3 text-right text-xs font-medium text-slate-400">
-                    Status
-                  </th>
-                </tr>
-              </thead>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-400">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
 
-              <tbody className="divide-y divide-slate-100">
-                {recentTransactions.map(
-                  (transaction) => (
-                    <tr
-                      key={transaction.id_transaksi}
-                      onClick={() =>
-                        router.push("/transaksi")
-                      }
-                      className="group cursor-pointer transition hover:bg-blue-50/40"
-                    >
-                      {/* ID */}
+                <tbody className="divide-y divide-slate-100">
+                  {recentTransactions.map(
+                    (transaction) => (
+                      <tr
+                        key={
+                          transaction.id_transaksi
+                        }
+                        onClick={() =>
+                          router.push(
+                            "/transaksi"
+                          )
+                        }
+                        className="group cursor-pointer transition hover:bg-blue-50/40"
+                      >
+                        {/* ID */}
 
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 transition group-hover:bg-blue-100">
-                            <ShoppingCart
-                              size={15}
-                              className="text-blue-600"
-                            />
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 transition group-hover:bg-blue-100">
+                              <ShoppingCart
+                                size={15}
+                                className="text-blue-600"
+                              />
+                            </div>
+
+                            <span className="text-sm font-medium text-slate-800">
+                              #
+                              {transaction.id_transaksi.slice(
+                                0,
+                                8
+                              ).toUpperCase()}
+                            </span>
                           </div>
+                        </td>
 
-                          <span className="text-sm font-medium text-slate-800">
-                            {
-                              transaction.id_transaksi
-                            }
-                          </span>
-                        </div>
-                      </td>
+                        {/* KASIR */}
 
-                      {/* KASIR */}
-
-                      <td className="px-6 py-4 text-sm text-slate-600">
-                        {transaction.nama_kasir}
-                      </td>
-
-                      {/* WAKTU */}
-
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-1.5 text-sm text-slate-500">
-                          <Clock3
-                            size={14}
-                            className="text-slate-400"
-                          />
-
+                        <td className="px-6 py-4 text-sm text-slate-600">
                           {
-                            transaction.tanggal_transaksi
+                            transaction.nama_kasir
                           }
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* TOTAL */}
+                        {/* WAKTU */}
 
-                      <td className="px-6 py-4 text-right text-sm font-semibold text-slate-900">
-                        {formatRupiah(
-                          transaction.total_harga
-                        )}
-                      </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-1.5 text-sm text-slate-500">
+                            <Clock3
+                              size={14}
+                              className="text-slate-400"
+                            />
 
-                      {/* STATUS */}
+                            {formatDate(
+                              transaction.tanggal_transaksi
+                            )}
+                          </div>
+                        </td>
 
-                      <td className="px-6 py-4 text-right">
-                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600">
-                          <CheckCircle2 size={13} />
+                        {/* TOTAL */}
 
-                          {transaction.status}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                )}
-              </tbody>
-            </table>
+                        <td className="px-6 py-4 text-right text-sm font-semibold text-slate-900">
+                          {formatRupiah(
+                            transaction.total_harga
+                          )}
+                        </td>
+
+                        {/* STATUS */}
+
+                        <td className="px-6 py-4 text-right">
+                          <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600">
+                            <CheckCircle2
+                              size={13}
+                            />
+
+                            {formatStatus(
+                              transaction.status
+                            )}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  )}
+                </tbody>
+              </table>
+            ) : (
+              <EmptyTransactions />
+            )}
           </div>
 
           {/* =====================================
@@ -694,64 +879,81 @@ export default function DashboardPage() {
           ===================================== */}
 
           <div className="divide-y divide-slate-100 md:hidden">
-            {recentTransactions.map(
-              (transaction) => (
-                <button
-                  key={transaction.id_transaksi}
-                  type="button"
-                  onClick={() =>
-                    router.push("/transaksi")
-                  }
-                  className="group w-full px-5 py-4 text-left transition hover:bg-blue-50/40"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 transition group-hover:bg-blue-100">
-                        <ShoppingCart
-                          size={15}
-                          className="text-blue-600"
+            {recentTransactions.length >
+            0 ? (
+              recentTransactions.map(
+                (transaction) => (
+                  <button
+                    key={
+                      transaction.id_transaksi
+                    }
+                    type="button"
+                    onClick={() =>
+                      router.push(
+                        "/transaksi"
+                      )
+                    }
+                    className="group w-full px-5 py-4 text-left transition hover:bg-blue-50/40"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 transition group-hover:bg-blue-100">
+                          <ShoppingCart
+                            size={15}
+                            className="text-blue-600"
+                          />
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-800">
+                            #
+                            {transaction.id_transaksi.slice(
+                              0,
+                              8
+                            ).toUpperCase()}
+                          </p>
+
+                          <p className="mt-1 text-xs text-slate-400">
+                            {
+                              transaction.nama_kasir
+                            }
+                          </p>
+                        </div>
+                      </div>
+
+                      <p className="shrink-0 text-sm font-semibold text-slate-900">
+                        {formatRupiah(
+                          transaction.total_harga
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                        <Clock3
+                          size={13}
                         />
+
+                        {formatDate(
+                          transaction.tanggal_transaksi
+                        )}
                       </div>
 
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-800">
-                          {
-                            transaction.id_transaksi
-                          }
-                        </p>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+                        <CheckCircle2
+                          size={12}
+                        />
 
-                        <p className="mt-1 text-xs text-slate-400">
-                          {
-                            transaction.nama_kasir
-                          }
-                        </p>
-                      </div>
+                        {formatStatus(
+                          transaction.status
+                        )}
+                      </span>
                     </div>
-
-                    <p className="shrink-0 text-sm font-semibold text-slate-900">
-                      {formatRupiah(
-                        transaction.total_harga
-                      )}
-                    </p>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                      <Clock3 size={13} />
-
-                      {
-                        transaction.tanggal_transaksi
-                      }
-                    </div>
-
-                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600">
-                      <CheckCircle2 size={12} />
-
-                      {transaction.status}
-                    </span>
-                  </div>
-                </button>
+                  </button>
+                )
               )
+            ) : (
+              <EmptyTransactions />
             )}
           </div>
         </section>
@@ -834,7 +1036,7 @@ function DashboardCard({
 ========================= */
 
 interface SalesChartProps {
-  data: SalesData[];
+  data: DashboardSalesData[];
   formatRupiah: (value: number) => string;
 }
 
@@ -843,7 +1045,9 @@ function SalesChart({
   formatRupiah,
 }: SalesChartProps) {
   const maxValue = Math.max(
-    ...data.map((item) => item.nilai),
+    ...data.map(
+      (item) => item.nilai
+    ),
     100000
   );
 
@@ -853,70 +1057,79 @@ function SalesChart({
         {/* GRID */}
 
         <div className="absolute inset-0 flex flex-col justify-between">
-          {[4, 3, 2, 1, 0].map((item) => (
-            <div
-              key={item}
-              className="flex items-center gap-3"
-            >
-              <span className="w-14 shrink-0 text-right text-[10px] text-slate-400">
-                {formatRupiah(
-                  Math.round(
-                    (maxValue / 4) * item
-                  )
-                )}
-              </span>
+          {[4, 3, 2, 1, 0].map(
+            (item) => (
+              <div
+                key={item}
+                className="flex items-center gap-3"
+              >
+                <span className="w-14 shrink-0 text-right text-[10px] text-slate-400">
+                  {formatRupiah(
+                    Math.round(
+                      (maxValue / 4) *
+                        item
+                    )
+                  )}
+                </span>
 
-              <div className="h-px flex-1 bg-slate-100" />
-            </div>
-          ))}
+                <div className="h-px flex-1 bg-slate-100" />
+              </div>
+            )
+          )}
         </div>
 
         {/* BARS */}
 
         <div className="absolute inset-0 ml-[68px] flex items-end justify-between gap-2">
-          {data.map((item, index) => {
-            const height =
-              item.nilai === 0
-                ? 2
-                : Math.max(
-                    (item.nilai / maxValue) * 100,
-                    4
-                  );
+          {data.map(
+            (item, index) => {
+              const height =
+                item.nilai === 0
+                  ? 2
+                  : Math.max(
+                      (item.nilai /
+                        maxValue) *
+                        100,
+                      4
+                    );
 
-            return (
-              <div
-                key={`${item.hari}-${index}`}
-                className="group flex h-full flex-1 flex-col items-center justify-end"
-              >
-                {/* TOOLTIP */}
+              return (
+                <div
+                  key={`${item.hari}-${index}`}
+                  className="group flex h-full flex-1 flex-col items-center justify-end"
+                >
+                  {/* TOOLTIP */}
 
-                <div className="mb-2 translate-y-1 opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
-                  <div className="whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 text-[10px] font-medium text-white shadow-sm">
-                    {formatRupiah(item.nilai)}
+                  <div className="mb-2 translate-y-1 opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+                    <div className="whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 text-[10px] font-medium text-white shadow-sm">
+                      {formatRupiah(
+                        item.nilai
+                      )}
+                    </div>
                   </div>
+
+                  {/* BAR */}
+
+                  <div className="flex h-[calc(100%-30px)] w-full items-end justify-center">
+                    <div
+                      className="w-full max-w-10 origin-bottom rounded-t-md bg-indigo-300 transition-all duration-300 group-hover:bg-indigo-500"
+                      style={{
+                        height: `${height}%`,
+                        animation:
+                          "dashboardBarGrow 500ms ease-out both",
+                      }}
+                    />
+                  </div>
+
+                  {/* LABEL */}
+
+                  <span className="mt-3 text-[11px] font-medium text-slate-400 transition-colors group-hover:text-indigo-600">
+                    {item.hari}
+                  </span>
                 </div>
-
-                {/* BAR */}
-
-                <div className="flex h-[calc(100%-30px)] w-full items-end justify-center">
-                  <div
-                    className="w-full max-w-10 origin-bottom rounded-t-md bg-indigo-300 transition-all duration-300 group-hover:bg-indigo-500"
-                    style={{
-                      height: `${height}%`,
-                      animation:
-                        "dashboardBarGrow 500ms ease-out both",
-                    }}
-                  />
-                </div>
-
-                {/* LABEL */}
-
-                <span className="mt-3 text-[11px] font-medium text-slate-400 transition-colors group-hover:text-indigo-600">
-                  {item.hari}
-                </span>
-              </div>
-            );
-          })}
+              );
+            }
+          )}
         </div>
       </div>
 
@@ -933,6 +1146,31 @@ function SalesChart({
           }
         }
       `}</style>
+    </div>
+  );
+}
+
+/* =========================
+   EMPTY TRANSACTIONS
+========================= */
+
+function EmptyTransactions() {
+  return (
+    <div className="flex min-h-[180px] flex-col items-center justify-center px-5 text-center">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
+        <ShoppingCart
+          size={19}
+          className="text-slate-400"
+        />
+      </div>
+
+      <p className="mt-3 text-sm font-medium text-slate-700">
+        Belum ada transaksi
+      </p>
+
+      <p className="mt-1 text-xs text-slate-400">
+        Belum ada data transaksi yang tersedia.
+      </p>
     </div>
   );
 }
