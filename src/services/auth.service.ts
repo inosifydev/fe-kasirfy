@@ -1,7 +1,6 @@
 import { AuthSession, Role } from "@/features/user/types";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+const API_URL = "/api/backend";
 
 export interface LoginPayload {
   identifier: string;
@@ -75,8 +74,11 @@ export interface AuthPermissions {
 /**
  * Login menggunakan email atau username.
  *
- * Jika input mengandung "@", dianggap sebagai email.
- * Jika tidak, dianggap sebagai username.
+ * Request:
+ * /api/backend/auth/login
+ *
+ * Proxy akan meneruskan ke:
+ * /api/v1/auth/login
  */
 export async function login(
   payload: LoginPayload
@@ -111,7 +113,7 @@ export async function login(
         };
 
     const response = await fetch(
-      `${API_URL}/api/v1/auth/login`,
+      `${API_URL}/auth/login`,
       {
         method: "POST",
         headers: {
@@ -150,8 +152,8 @@ export async function login(
     }
 
     /*
-     * Setelah login berhasil, ambil profile dari backend.
-     * Profile merupakan sumber data user yang lebih lengkap.
+     * Setelah login berhasil,
+     * ambil profile melalui proxy.
      */
     const profile = await getProfile();
 
@@ -163,7 +165,7 @@ export async function login(
     }
 
     /*
-     * Ambil permission user yang sedang login.
+     * Ambil permission melalui proxy.
      */
     const permissions = await getPermissions();
 
@@ -192,8 +194,9 @@ export async function login(
     };
 
     /*
-     * Simpan permissions untuk kebutuhan frontend.
-     * Token tidak disimpan ke localStorage.
+     * Simpan permission API untuk kebutuhan frontend.
+     *
+     * Token TIDAK disimpan di localStorage.
      */
     if (typeof window !== "undefined") {
       localStorage.setItem(
@@ -220,11 +223,14 @@ export async function login(
 
 /**
  * Mengambil profile user yang sedang login.
+ *
+ * Request:
+ * /api/backend/auth/profile
  */
 export async function getProfile() {
   try {
     const response = await fetch(
-      `${API_URL}/api/v1/auth/profile`,
+      `${API_URL}/auth/profile`,
       {
         method: "GET",
         headers: {
@@ -255,11 +261,14 @@ export async function getProfile() {
 
 /**
  * Mengambil permission user yang sedang login.
+ *
+ * Request:
+ * /api/backend/auth/permissions
  */
 export async function getPermissions(): Promise<AuthPermissions | null> {
   try {
     const response = await fetch(
-      `${API_URL}/api/v1/auth/permissions`,
+      `${API_URL}/auth/permissions`,
       {
         method: "GET",
         headers: {
@@ -277,10 +286,7 @@ export async function getPermissions(): Promise<AuthPermissions | null> {
     const result: PermissionsApiResponse =
       await response.json();
 
-    if (
-      !result.success ||
-      !result.data
-    ) {
+    if (!result.success || !result.data) {
       return null;
     }
 
@@ -293,11 +299,14 @@ export async function getPermissions(): Promise<AuthPermissions | null> {
 
 /**
  * Refresh access token.
+ *
+ * Request:
+ * /api/backend/auth/refresh
  */
 export async function refreshToken(): Promise<boolean> {
   try {
     const response = await fetch(
-      `${API_URL}/api/v1/auth/refresh`,
+      `${API_URL}/auth/refresh`,
       {
         method: "POST",
         headers: {
@@ -322,11 +331,14 @@ export async function refreshToken(): Promise<boolean> {
 
 /**
  * Logout user.
+ *
+ * Request:
+ * /api/backend/auth/logout
  */
 export async function logout(): Promise<boolean> {
   try {
     const response = await fetch(
-      `${API_URL}/api/v1/auth/logout`,
+      `${API_URL}/auth/logout`,
       {
         method: "POST",
         headers: {

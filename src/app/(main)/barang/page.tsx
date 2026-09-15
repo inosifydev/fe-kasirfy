@@ -1,6 +1,13 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+  type ElementType,
+  type ReactNode,
+} from "react";
 import {
   Edit,
   MoreHorizontal,
@@ -15,119 +22,14 @@ import {
   PackagePlus,
 } from "lucide-react";
 
-interface Barang {
-  id_barang: string;
-  nama_barang: string;
-  kategori: string;
-  harga: number;
-  stok: number;
-  satuan: string;
-  deskripsi: string;
-  created_at: string;
-}
+import {
+  createBarang,
+  deleteBarang,
+  getBarangs,
+  updateBarang,
+} from "@/services/barang.service";
 
-const initialBarang: Barang[] = [
-  {
-    id_barang: "550e8400-e29b-41d4-a716-446655440001",
-    nama_barang: "Indomie Goreng",
-    kategori: "Makanan",
-    harga: 3000,
-    stok: 120,
-    satuan: "pcs",
-    deskripsi: "Mi instan goreng",
-    created_at: "2026-09-01",
-  },
-  {
-    id_barang: "550e8400-e29b-41d4-a716-446655440002",
-    nama_barang: "Aqua 600ml",
-    kategori: "Minuman",
-    harga: 3000,
-    stok: 85,
-    satuan: "botol",
-    deskripsi: "Air mineral 600ml",
-    created_at: "2026-09-01",
-  },
-  {
-    id_barang: "550e8400-e29b-41d4-a716-446655440003",
-    nama_barang: "Teh Pucuk Harum",
-    kategori: "Minuman",
-    harga: 4000,
-    stok: 61,
-    satuan: "botol",
-    deskripsi: "Teh kemasan",
-    created_at: "2026-09-02",
-  },
-  {
-    id_barang: "550e8400-e29b-41d4-a716-446655440004",
-    nama_barang: "Kopi Good Day",
-    kategori: "Minuman",
-    harga: 4000,
-    stok: 48,
-    satuan: "pcs",
-    deskripsi: "Kopi instan",
-    created_at: "2026-09-02",
-  },
-  {
-    id_barang: "550e8400-e29b-41d4-a716-446655440005",
-    nama_barang: "Roti Coklat",
-    kategori: "Makanan",
-    harga: 5000,
-    stok: 35,
-    satuan: "pcs",
-    deskripsi: "Roti isi coklat",
-    created_at: "2026-09-03",
-  },
-  {
-    id_barang: "550e8400-e29b-41d4-a716-446655440006",
-    nama_barang: "Chitato Original",
-    kategori: "Snack",
-    harga: 11000,
-    stok: 27,
-    satuan: "pcs",
-    deskripsi: "Keripik kentang",
-    created_at: "2026-09-03",
-  },
-  {
-    id_barang: "550e8400-e29b-41d4-a716-446655440007",
-    nama_barang: "SilverQueen",
-    kategori: "Snack",
-    harga: 15000,
-    stok: 18,
-    satuan: "pcs",
-    deskripsi: "Cokelat batang",
-    created_at: "2026-09-04",
-  },
-  {
-    id_barang: "550e8400-e29b-41d4-a716-446655440008",
-    nama_barang: "Susu Ultra Milk",
-    kategori: "Minuman",
-    harga: 7000,
-    stok: 8,
-    satuan: "kotak",
-    deskripsi: "Susu UHT",
-    created_at: "2026-09-04",
-  },
-  {
-    id_barang: "550e8400-e29b-41d4-a716-446655440009",
-    nama_barang: "Sabun Lifebuoy",
-    kategori: "Kebutuhan",
-    harga: 4500,
-    stok: 4,
-    satuan: "pcs",
-    deskripsi: "Sabun mandi",
-    created_at: "2026-09-04",
-  },
-  {
-    id_barang: "550e8400-e29b-41d4-a716-446655440010",
-    nama_barang: "Pulpen Standard",
-    kategori: "ATK",
-    harga: 2500,
-    stok: 0,
-    satuan: "pcs",
-    deskripsi: "Pulpen hitam",
-    created_at: "2026-09-04",
-  },
-];
+import type { Barang } from "@/features/barang/types";
 
 const categories = [
   "Semua",
@@ -136,11 +38,30 @@ const categories = [
   "Snack",
   "Kebutuhan",
   "ATK",
+  "Aksesoris",
+];
+
+const categoryOptions = [
+  "Makanan",
+  "Minuman",
+  "Snack",
+  "Kebutuhan",
+  "ATK",
+  "Aksesoris",
+];
+
+const satuanOptions = [
+  "pcs",
+  "botol",
+  "kotak",
+  "pack",
+  "kg",
+  "liter",
+  "unit",
 ];
 
 export default function BarangPage() {
-  const [barang, setBarang] =
-    useState<Barang[]>(initialBarang);
+  const [barang, setBarang] = useState<Barang[]>([]);
 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("Semua");
@@ -163,6 +84,12 @@ export default function BarangPage() {
   const [stockAmount, setStockAmount] =
     useState("");
 
+  const [isLoading, setIsLoading] =
+    useState(true);
+
+  const [isSubmitting, setIsSubmitting] =
+    useState(false);
+
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "error";
@@ -177,47 +104,103 @@ export default function BarangPage() {
     deskripsi: "",
   });
 
+  /* =========================
+     LOAD DATA
+  ========================= */
+
+  const loadBarang = async () => {
+    try {
+      setIsLoading(true);
+
+      const data = await getBarangs();
+
+      setBarang(data);
+    } catch (error) {
+      console.error(
+        "Load barang error:",
+        error
+      );
+
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Gagal mengambil data barang.",
+        "error"
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBarang();
+  }, []);
+
+  /* =========================
+     FILTER
+  ========================= */
+
   const filteredBarang = useMemo(() => {
     return barang.filter((item) => {
-      const matchSearch = item.nama_barang
-        .toLowerCase()
-        .includes(search.toLowerCase());
+      const matchSearch =
+        item.nama_barang
+          .toLowerCase()
+          .includes(search.toLowerCase());
 
       const matchCategory =
         category === "Semua" ||
         item.kategori === category;
 
-      return matchSearch && matchCategory;
+      return (
+        matchSearch &&
+        matchCategory
+      );
     });
   }, [barang, search, category]);
+
+  /* =========================
+     SUMMARY
+  ========================= */
 
   const totalProduk = barang.length;
 
   const totalStok = barang.reduce(
-    (total, item) => total + item.stok,
+    (total, item) =>
+      total + Number(item.stok || 0),
     0
   );
 
   const stokMenipis = barang.filter(
-    (item) => item.stok > 0 && item.stok <= 10
+    (item) =>
+      item.stok > 0 &&
+      item.stok <= 10
   ).length;
 
   const stokHabis = barang.filter(
     (item) => item.stok === 0
   ).length;
 
-  const formatRupiah = (value: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      maximumFractionDigits: 0,
-    }).format(value);
+  /* =========================
+     HELPERS
+  ========================= */
+
+  const formatRupiah = (
+    value: number
+  ) => {
+    return new Intl.NumberFormat(
+      "id-ID",
+      {
+        style: "currency",
+        currency: "IDR",
+        maximumFractionDigits: 0,
+      }
+    ).format(value);
   };
 
-  const showToast = (
+  function showToast(
     message: string,
     type: "success" | "error" = "success"
-  ) => {
+  ) {
     setToast({
       message,
       type,
@@ -226,9 +209,11 @@ export default function BarangPage() {
     setTimeout(() => {
       setToast(null);
     }, 2500);
-  };
+  }
 
-  const getStockStatus = (stok: number) => {
+  const getStockStatus = (
+    stok: number
+  ) => {
     if (stok === 0) {
       return {
         label: "Habis",
@@ -251,14 +236,35 @@ export default function BarangPage() {
       label: "Tersedia",
       className:
         "border-emerald-100 bg-emerald-50 text-emerald-600",
-      icon: CheckCircle2,
+        icon: CheckCircle2,
     };
   };
 
-  const handleAddBarang = (
+  /* =========================
+     RESET ADD FORM
+  ========================= */
+
+  const resetAddForm = () => {
+    setNewBarang({
+      nama_barang: "",
+      kategori: "Makanan",
+      harga: "",
+      stok: "",
+      satuan: "pcs",
+      deskripsi: "",
+    });
+  };
+
+  /* =========================
+     ADD BARANG
+  ========================= */
+
+  const handleAddBarang = async (
     e: FormEvent<HTMLFormElement>
   ) => {
     e.preventDefault();
+
+    if (isSubmitting) return;
 
     if (!newBarang.nama_barang.trim()) {
       showToast(
@@ -290,49 +296,72 @@ export default function BarangPage() {
       return;
     }
 
-    const item: Barang = {
-      id_barang: crypto.randomUUID(),
-      nama_barang:
-        newBarang.nama_barang.trim(),
-      kategori: newBarang.kategori,
-      harga: Number(newBarang.harga),
-      stok: Number(newBarang.stok),
-      satuan: newBarang.satuan,
-      deskripsi:
-        newBarang.deskripsi.trim(),
-      created_at:
-        new Date().toISOString(),
-    };
+    try {
+      setIsSubmitting(true);
 
-    setBarang((prev) => [
-      ...prev,
-      item,
-    ]);
+      const item =
+        await createBarang({
+          nama_barang:
+            newBarang.nama_barang.trim(),
+          kategori:
+            newBarang.kategori,
+          harga:
+            Number(newBarang.harga),
+          stok:
+            Number(newBarang.stok),
+          satuan:
+            newBarang.satuan,
+          deskripsi:
+            newBarang.deskripsi.trim(),
+        });
 
-    setNewBarang({
-      nama_barang: "",
-      kategori: "Makanan",
-      harga: "",
-      stok: "",
-      satuan: "pcs",
-      deskripsi: "",
-    });
+      setBarang((prev) => [
+        ...prev,
+        item,
+      ]);
 
-    setShowAddModal(false);
+      resetAddForm();
 
-    showToast(
-      `${item.nama_barang} berhasil ditambahkan`
-    );
+      setShowAddModal(false);
+
+      showToast(
+        `${item.nama_barang} berhasil ditambahkan`
+      );
+    } catch (error) {
+      console.error(
+        "Create barang error:",
+        error
+      );
+
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Gagal menambahkan barang.",
+        "error"
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleAddStock = (
+  /* =========================
+     ADD STOCK
+  ========================= */
+
+  const handleAddStock = async (
     e: FormEvent<HTMLFormElement>
   ) => {
     e.preventDefault();
 
-    if (!selectedBarang) return;
+    if (
+      !selectedBarang ||
+      isSubmitting
+    ) {
+      return;
+    }
 
-    const amount = Number(stockAmount);
+    const amount =
+      Number(stockAmount);
 
     if (!amount || amount <= 0) {
       showToast(
@@ -342,36 +371,84 @@ export default function BarangPage() {
       return;
     }
 
-    setBarang((prev) =>
-      prev.map((item) =>
-        item.id_barang ===
-        selectedBarang.id_barang
-          ? {
-              ...item,
-              stok:
-                item.stok + amount,
-            }
-          : item
-      )
-    );
+    try {
+      setIsSubmitting(true);
 
-    setStockAmount("");
-    setSelectedBarang(null);
-    setShowStockModal(false);
+      const updatedBarang =
+        await updateBarang(
+          selectedBarang.id_barang,
+          {
+            nama_barang:
+              selectedBarang.nama_barang,
+            kategori:
+              selectedBarang.kategori,
+            harga:
+              selectedBarang.harga,
+            stok:
+              selectedBarang.stok +
+              amount,
+            satuan:
+              selectedBarang.satuan,
+            deskripsi:
+              selectedBarang.deskripsi,
+          }
+        );
 
-    showToast(
-      `Stok ${selectedBarang.nama_barang} berhasil ditambahkan`
-    );
+      setBarang((prev) =>
+        prev.map((item) =>
+          item.id_barang ===
+          updatedBarang.id_barang
+            ? updatedBarang
+            : item
+        )
+      );
+
+      const namaBarang =
+        updatedBarang.nama_barang;
+
+      setStockAmount("");
+      setSelectedBarang(null);
+      setShowStockModal(false);
+
+      showToast(
+        `Stok ${namaBarang} berhasil ditambahkan`
+      );
+    } catch (error) {
+      console.error(
+        "Add stock error:",
+        error
+      );
+
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Gagal menambahkan stok.",
+        "error"
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleEditBarang = (
+  /* =========================
+     EDIT BARANG
+  ========================= */
+
+  const handleEditBarang = async (
     e: FormEvent<HTMLFormElement>
   ) => {
     e.preventDefault();
 
-    if (!selectedBarang) return;
+    if (
+      !selectedBarang ||
+      isSubmitting
+    ) {
+      return;
+    }
 
-    if (!selectedBarang.nama_barang.trim()) {
+    if (
+      !selectedBarang.nama_barang.trim()
+    ) {
       showToast(
         "Nama barang harus diisi",
         "error"
@@ -379,7 +456,9 @@ export default function BarangPage() {
       return;
     }
 
-    if (selectedBarang.harga <= 0) {
+    if (
+      selectedBarang.harga <= 0
+    ) {
       showToast(
         "Harga harus lebih dari 0",
         "error"
@@ -387,7 +466,9 @@ export default function BarangPage() {
       return;
     }
 
-    if (selectedBarang.stok < 0) {
+    if (
+      selectedBarang.stok < 0
+    ) {
       showToast(
         "Stok tidak boleh negatif",
         "error"
@@ -395,47 +476,126 @@ export default function BarangPage() {
       return;
     }
 
-    setBarang((prev) =>
-      prev.map((item) =>
-        item.id_barang ===
-        selectedBarang.id_barang
-          ? selectedBarang
-          : item
-      )
-    );
+    try {
+      setIsSubmitting(true);
 
-    setShowEditModal(false);
+      const updatedBarang =
+        await updateBarang(
+          selectedBarang.id_barang,
+          {
+            nama_barang:
+              selectedBarang.nama_barang.trim(),
+            kategori:
+              selectedBarang.kategori,
+            harga:
+              Number(
+                selectedBarang.harga
+              ),
+            stok:
+              Number(
+                selectedBarang.stok
+              ),
+            satuan:
+              selectedBarang.satuan,
+            deskripsi:
+              selectedBarang.deskripsi.trim(),
+          }
+        );
 
-    showToast(
-      `${selectedBarang.nama_barang} berhasil diperbarui`
-    );
+      setBarang((prev) =>
+        prev.map((item) =>
+          item.id_barang ===
+          updatedBarang.id_barang
+            ? updatedBarang
+            : item
+        )
+      );
 
-    setSelectedBarang(null);
+      setShowEditModal(false);
+
+      showToast(
+        `${updatedBarang.nama_barang} berhasil diperbarui`
+      );
+
+      setSelectedBarang(null);
+    } catch (error) {
+      console.error(
+        "Update barang error:",
+        error
+      );
+
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Gagal memperbarui barang.",
+        "error"
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDeleteBarang = () => {
-    if (!selectedBarang) return;
+  /* =========================
+     DELETE BARANG
+  ========================= */
 
-    const namaBarang =
-      selectedBarang.nama_barang;
+  const handleDeleteBarang =
+    async () => {
+      if (
+        !selectedBarang ||
+        isSubmitting
+      ) {
+        return;
+      }
 
-    setBarang((prev) =>
-      prev.filter(
-        (item) =>
-          item.id_barang !==
+      const namaBarang =
+        selectedBarang.nama_barang;
+
+      try {
+        setIsSubmitting(true);
+
+        await deleteBarang(
           selectedBarang.id_barang
-      )
-    );
+        );
 
-    setSelectedBarang(null);
-    setShowDeleteModal(false);
+        setBarang((prev) =>
+          prev.filter(
+            (item) =>
+              item.id_barang !==
+              selectedBarang.id_barang
+          )
+        );
 
-    showToast(
-      `${namaBarang} berhasil dihapus`
-    );
-  };
+        setSelectedBarang(null);
+        setShowDeleteModal(false);
 
-  const openEditModal = (item: Barang) => {
+        showToast(
+          `${namaBarang} berhasil dihapus`
+        );
+      } catch (error) {
+        console.error(
+          "Delete barang error:",
+          error
+        );
+
+        showToast(
+          error instanceof Error
+            ? error.message
+            : "Gagal menghapus barang.",
+          "error"
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
+  /* =========================
+     OPEN MODALS
+  ========================= */
+
+  const openEditModal = (
+    item: Barang
+  ) => {
     setSelectedBarang({
       ...item,
     });
@@ -443,15 +603,36 @@ export default function BarangPage() {
     setShowEditModal(true);
   };
 
-  const openStockModal = (item: Barang) => {
-    setSelectedBarang(item);
+  const openStockModal = (
+    item: Barang
+  ) => {
+    setSelectedBarang({
+      ...item,
+    });
+
     setStockAmount("");
     setShowStockModal(true);
   };
 
-  const openDeleteModal = (item: Barang) => {
-    setSelectedBarang(item);
+  const openDeleteModal = (
+    item: Barang
+  ) => {
+    setSelectedBarang({
+      ...item,
+    });
+
     setShowDeleteModal(true);
+  };
+
+  /* =========================
+     CLOSE ADD MODAL
+  ========================= */
+
+  const closeAddModal = () => {
+    if (isSubmitting) return;
+
+    setShowAddModal(false);
+    resetAddForm();
   };
 
   return (
@@ -480,7 +661,8 @@ export default function BarangPage() {
               onClick={() =>
                 setShowAddModal(true)
               }
-              className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:bg-indigo-700 hover:shadow-md active:scale-[0.98]"
+              disabled={isSubmitting}
+              className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:bg-indigo-700 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Plus size={18} />
               Tambah Barang
@@ -552,10 +734,12 @@ export default function BarangPage() {
                       type="text"
                       value={search}
                       onChange={(e) =>
-                        setSearch(e.target.value)
+                        setSearch(
+                          e.target.value
+                        )
                       }
                       placeholder="Cari nama barang..."
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-10 text-sm text-slate-400 outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-10 text-sm text-slate-900 outline-none transition-all duration-200 placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
                     />
 
                     {search && (
@@ -585,22 +769,25 @@ export default function BarangPage() {
                 {/* CATEGORY */}
 
                 <div className="flex gap-2 overflow-x-auto pb-1">
-                  {categories.map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() =>
-                        setCategory(item)
-                      }
-                      className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition-all duration-200 ${
-                        category === item
-                          ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200"
-                          : "bg-slate-50 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"
-                      }`}
-                    >
-                      {item}
-                    </button>
-                  ))}
+                  {categories.map(
+                    (item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() =>
+                          setCategory(item)
+                        }
+                        className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition-all duration-200 ${
+                          category ===
+                          item
+                            ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200"
+                            : "bg-slate-50 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
             </div>
@@ -641,197 +828,239 @@ export default function BarangPage() {
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-                  {filteredBarang.length > 0 ? (
-                    filteredBarang.map((item) => {
-                      const stockStatus =
-                        getStockStatus(
-                          item.stok
-                        );
 
-                      const StatusIcon =
-                        stockStatus.icon;
+                  {/* LOADING */}
 
-                      return (
-                        <tr
-                          key={
-                            item.id_barang
-                          }
-                          className="group transition-colors duration-150 hover:bg-indigo-50/30"
-                        >
+                  {isLoading ? (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-5 py-16 text-center"
+                      >
+                        <div className="flex flex-col items-center">
+                          <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-600" />
 
-                          {/* PRODUCT */}
+                          <p className="mt-3 text-sm font-medium text-slate-600">
+                            Memuat data barang...
+                          </p>
 
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-3">
+                          <p className="mt-1 text-xs text-slate-400">
+                            Mengambil data dari
+                            server
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredBarang.length >
+                    0 ? (
+                    filteredBarang.map(
+                      (item) => {
+                        const stockStatus =
+                          getStockStatus(
+                            item.stok
+                          );
 
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 transition-all duration-200 group-hover:bg-indigo-50 group-hover:shadow-sm">
-                                <Package
-                                  size={18}
-                                  className="text-slate-500 transition-colors duration-200 group-hover:text-indigo-500"
-                                />
+                        const StatusIcon =
+                          stockStatus.icon;
+
+                        return (
+                          <tr
+                            key={
+                              item.id_barang
+                            }
+                            className="group transition-colors duration-150 hover:bg-indigo-50/30"
+                          >
+
+                            {/* PRODUCT */}
+
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-3">
+
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 transition-all duration-200 group-hover:bg-indigo-50 group-hover:shadow-sm">
+                                  <Package
+                                    size={18}
+                                    className="text-slate-500 transition-colors duration-200 group-hover:text-indigo-500"
+                                  />
+                                </div>
+
+                                <div className="min-w-0">
+                                  <p className="font-medium text-slate-800 transition-colors group-hover:text-indigo-700">
+                                    {
+                                      item.nama_barang
+                                    }
+                                  </p>
+
+                                  <p className="mt-0.5 text-xs text-slate-400">
+                                    ID:{" "}
+                                    {item.id_barang.slice(
+                                      0,
+                                      8
+                                    )}
+                                  </p>
+                                </div>
                               </div>
+                            </td>
 
-                              <div className="min-w-0">
-                                <p className="font-medium text-slate-800 transition-colors group-hover:text-indigo-700">
-                                  {
-                                    item.nama_barang
-                                  }
-                                </p>
+                            {/* CATEGORY */}
 
-                                <p className="mt-0.5 text-xs text-slate-400">
-                                  ID:{" "}
-                                  {item.id_barang.slice(
-                                    0,
-                                    8
-                                  )}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* CATEGORY */}
-
-                          <td className="px-5 py-4">
-                            <span className="inline-flex rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors group-hover:bg-white">
-                              {
-                                item.kategori
-                              }
-                            </span>
-                          </td>
-
-                          {/* PRICE */}
-
-                          <td className="px-5 py-4">
-                            <span className="font-semibold text-indigo-600">
-                              {formatRupiah(
-                                item.harga
-                              )}
-                            </span>
-                          </td>
-
-                          {/* STOCK */}
-
-                          <td className="px-5 py-4">
-                            <div>
-                              <span
-                                className={`font-semibold ${
-                                  item.stok ===
-                                  0
-                                    ? "text-red-600"
-                                    : item.stok <=
-                                        10
-                                      ? "text-amber-600"
-                                      : "text-slate-700"
-                                }`}
-                              >
-                                {item.stok}
-                              </span>
-
-                              <span className="ml-1 text-xs text-slate-400">
+                            <td className="px-5 py-4">
+                              <span className="inline-flex rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors group-hover:bg-white">
                                 {
-                                  item.satuan
+                                  item.kategori
                                 }
                               </span>
-                            </div>
+                            </td>
 
-                            {item.stok >
-                              0 &&
-                              item.stok <=
-                                10 && (
-                                <p className="mt-1 text-[10px] font-medium text-amber-500">
-                                  Segera
-                                  restock
-                                </p>
-                              )}
-                          </td>
+                            {/* PRICE */}
 
-                          {/* STATUS */}
+                            <td className="px-5 py-4">
+                              <span className="font-semibold text-indigo-600">
+                                {formatRupiah(
+                                  item.harga
+                                )}
+                              </span>
+                            </td>
 
-                          <td className="px-5 py-4">
-                            <span
-                              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${stockStatus.className}`}
-                            >
-                              <StatusIcon
-                                size={13}
-                              />
+                            {/* STOCK */}
 
-                              {
-                                stockStatus.label
-                              }
-                            </span>
-                          </td>
+                            <td className="px-5 py-4">
+                              <div>
+                                <span
+                                  className={`font-semibold ${
+                                    item.stok ===
+                                    0
+                                      ? "text-red-600"
+                                      : item.stok <=
+                                          10
+                                        ? "text-amber-600"
+                                        : "text-slate-700"
+                                  }`}
+                                >
+                                  {
+                                    item.stok
+                                  }
+                                </span>
 
-                          {/* ACTION */}
+                                <span className="ml-1 text-xs text-slate-400">
+                                  {
+                                    item.satuan
+                                  }
+                                </span>
+                              </div>
 
-                          <td className="px-5 py-4">
-                            <div className="flex justify-end gap-1.5">
+                              {item.stok >
+                                0 &&
+                                item.stok <=
+                                  10 && (
+                                  <p className="mt-1 text-[10px] font-medium text-amber-500">
+                                    Segera
+                                    restock
+                                  </p>
+                                )}
+                            </td>
 
-                              {/* STOCK */}
+                            {/* STATUS */}
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openStockModal(
-                                    item
-                                  )}
-                                title="Tambah stok"
-                                className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600 transition-all duration-200 hover:bg-emerald-50 hover:text-emerald-600 active:scale-[0.97]"
+                            <td className="px-5 py-4">
+                              <span
+                                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${stockStatus.className}`}
                               >
-                                <PackagePlus
-                                  size={14}
+                                <StatusIcon
+                                  size={13}
                                 />
-                                Stok
-                              </button>
 
-                              {/* EDIT */}
+                                {
+                                  stockStatus.label
+                                }
+                              </span>
+                            </td>
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openEditModal(
-                                    item
-                                  )}
-                                title="Edit barang"
-                                className="rounded-lg p-2 text-slate-400 transition-all duration-200 hover:bg-indigo-50 hover:text-indigo-600 active:scale-[0.95]"
-                              >
-                                <Edit
-                                  size={17}
-                                />
-                              </button>
+                            {/* ACTION */}
 
-                              {/* DELETE */}
+                            <td className="px-5 py-4">
+                              <div className="flex justify-end gap-1.5">
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openDeleteModal(
-                                    item
-                                  )}
-                                title="Hapus barang"
-                                className="rounded-lg p-2 text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-600 active:scale-[0.95]"
-                              >
-                                <Trash2
-                                  size={17}
-                                />
-                              </button>
+                                {/* STOCK */}
 
-                              {/* MORE */}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openStockModal(
+                                      item
+                                    )
+                                  }
+                                  disabled={
+                                    isSubmitting
+                                  }
+                                  title="Tambah stok"
+                                  className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600 transition-all duration-200 hover:bg-emerald-50 hover:text-emerald-600 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <PackagePlus
+                                    size={14}
+                                  />
+                                  Stok
+                                </button>
 
-                              <button
-                                type="button"
-                                title="Lainnya"
-                                className="rounded-lg p-2 text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-slate-700 active:scale-[0.95]"
-                              >
-                                <MoreHorizontal
-                                  size={17}
-                                />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
+                                {/* EDIT */}
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openEditModal(
+                                      item
+                                    )
+                                  }
+                                  disabled={
+                                    isSubmitting
+                                  }
+                                  title="Edit barang"
+                                  className="rounded-lg p-2 text-slate-400 transition-all duration-200 hover:bg-indigo-50 hover:text-indigo-600 active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <Edit
+                                    size={17}
+                                  />
+                                </button>
+
+                                {/* DELETE */}
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openDeleteModal(
+                                      item
+                                    )
+                                  }
+                                  disabled={
+                                    isSubmitting
+                                  }
+                                  title="Hapus barang"
+                                  className="rounded-lg p-2 text-slate-400 transition-all duration-200 hover:bg-red-50 hover:text-red-600 active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  <Trash2
+                                    size={17}
+                                  />
+                                </button>
+
+                                {/* MORE */}
+
+                                <button
+                                  type="button"
+                                  title="Lainnya"
+                                  className="rounded-lg p-2 text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-slate-700 active:scale-[0.95]"
+                                >
+                                  <MoreHorizontal
+                                    size={17}
+                                  />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      }
+                    )
                   ) : (
+                    /* EMPTY STATE */
+
                     <tr>
                       <td
                         colSpan={6}
@@ -887,7 +1116,8 @@ export default function BarangPage() {
                 produk
               </p>
 
-              {category !== "Semua" && (
+              {category !==
+                "Semua" && (
                 <p className="text-xs text-slate-400">
                   Filter:{" "}
                   <span className="font-medium text-indigo-600">
@@ -908,12 +1138,12 @@ export default function BarangPage() {
         <Modal
           title="Tambah Barang"
           description="Tambahkan produk baru ke dalam inventori."
-          onClose={() =>
-            setShowAddModal(false)
-          }
+          onClose={closeAddModal}
         >
           <form
-            onSubmit={handleAddBarang}
+            onSubmit={
+              handleAddBarang
+            }
             className="space-y-5"
           >
             <InputField
@@ -943,13 +1173,9 @@ export default function BarangPage() {
                     kategori: value,
                   })
                 }
-                options={[
-                  "Makanan",
-                  "Minuman",
-                  "Snack",
-                  "Kebutuhan",
-                  "ATK",
-                ]}
+                options={
+                  categoryOptions
+                }
               />
 
               <SelectField
@@ -963,14 +1189,9 @@ export default function BarangPage() {
                     satuan: value,
                   })
                 }
-                options={[
-                  "pcs",
-                  "botol",
-                  "kotak",
-                  "pack",
-                  "kg",
-                  "liter",
-                ]}
+                options={
+                  satuanOptions
+                }
               />
             </div>
 
@@ -978,7 +1199,9 @@ export default function BarangPage() {
               <InputField
                 label="Harga"
                 type="number"
-                value={newBarang.harga}
+                value={
+                  newBarang.harga
+                }
                 onChange={(value) =>
                   setNewBarang({
                     ...newBarang,
@@ -992,7 +1215,9 @@ export default function BarangPage() {
               <InputField
                 label="Stok Awal"
                 type="number"
-                value={newBarang.stok}
+                value={
+                  newBarang.stok
+                }
                 onChange={(value) =>
                   setNewBarang({
                     ...newBarang,
@@ -1019,10 +1244,15 @@ export default function BarangPage() {
             />
 
             <ModalActions
-              onCancel={() =>
-                setShowAddModal(false)
+              onCancel={closeAddModal}
+              submitText={
+                isSubmitting
+                  ? "Menyimpan..."
+                  : "Simpan Barang"
               }
-              submitText="Simpan Barang"
+              disabled={
+                isSubmitting
+              }
             />
           </form>
         </Modal>
@@ -1038,12 +1268,21 @@ export default function BarangPage() {
             title="Tambah Stok"
             description={`Tambahkan stok untuk ${selectedBarang.nama_barang}.`}
             onClose={() => {
-              setShowStockModal(false);
-              setSelectedBarang(null);
+              if (isSubmitting)
+                return;
+
+              setShowStockModal(
+                false
+              );
+              setSelectedBarang(
+                null
+              );
             }}
           >
             <form
-              onSubmit={handleAddStock}
+              onSubmit={
+                handleAddStock
+              }
               className="space-y-5"
             >
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
@@ -1091,7 +1330,9 @@ export default function BarangPage() {
               <InputField
                 label="Jumlah Stok Ditambahkan"
                 type="number"
-                value={stockAmount}
+                value={
+                  stockAmount
+                }
                 onChange={
                   setStockAmount
                 }
@@ -1125,6 +1366,11 @@ export default function BarangPage() {
 
               <ModalActions
                 onCancel={() => {
+                  if (
+                    isSubmitting
+                  )
+                    return;
+
                   setShowStockModal(
                     false
                   );
@@ -1132,7 +1378,14 @@ export default function BarangPage() {
                     null
                   );
                 }}
-                submitText="Tambah Stok"
+                submitText={
+                  isSubmitting
+                    ? "Menyimpan..."
+                    : "Tambah Stok"
+                }
+                disabled={
+                  isSubmitting
+                }
               />
             </form>
           </Modal>
@@ -1148,8 +1401,15 @@ export default function BarangPage() {
             title="Edit Barang"
             description="Perbarui informasi produk."
             onClose={() => {
-              setShowEditModal(false);
-              setSelectedBarang(null);
+              if (isSubmitting)
+                return;
+
+              setShowEditModal(
+                false
+              );
+              setSelectedBarang(
+                null
+              );
             }}
           >
             <form
@@ -1186,13 +1446,9 @@ export default function BarangPage() {
                         value,
                     })
                   }
-                  options={[
-                    "Makanan",
-                    "Minuman",
-                    "Snack",
-                    "Kebutuhan",
-                    "ATK",
-                  ]}
+                  options={
+                    categoryOptions
+                  }
                 />
 
                 <SelectField
@@ -1207,14 +1463,9 @@ export default function BarangPage() {
                         value,
                     })
                   }
-                  options={[
-                    "pcs",
-                    "botol",
-                    "kotak",
-                    "pack",
-                    "kg",
-                    "liter",
-                  ]}
+                  options={
+                    satuanOptions
+                  }
                 />
               </div>
 
@@ -1272,6 +1523,11 @@ export default function BarangPage() {
 
               <ModalActions
                 onCancel={() => {
+                  if (
+                    isSubmitting
+                  )
+                    return;
+
                   setShowEditModal(
                     false
                   );
@@ -1279,7 +1535,14 @@ export default function BarangPage() {
                     null
                   );
                 }}
-                submitText="Simpan Perubahan"
+                submitText={
+                  isSubmitting
+                    ? "Menyimpan..."
+                    : "Simpan Perubahan"
+                }
+                disabled={
+                  isSubmitting
+                }
               />
             </form>
           </Modal>
@@ -1295,6 +1558,9 @@ export default function BarangPage() {
             title="Hapus Barang"
             description="Tindakan ini akan menghapus data barang dari daftar."
             onClose={() => {
+              if (isSubmitting)
+                return;
+
               setShowDeleteModal(
                 false
               );
@@ -1335,6 +1601,11 @@ export default function BarangPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    if (
+                      isSubmitting
+                    )
+                      return;
+
                     setShowDeleteModal(
                       false
                     );
@@ -1342,7 +1613,10 @@ export default function BarangPage() {
                       null
                     );
                   }}
-                  className="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 transition-all duration-200 hover:bg-slate-100 active:scale-[0.98]"
+                  disabled={
+                    isSubmitting
+                  }
+                  className="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 transition-all duration-200 hover:bg-slate-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Batal
                 </button>
@@ -1352,9 +1626,14 @@ export default function BarangPage() {
                   onClick={
                     handleDeleteBarang
                   }
-                  className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:bg-red-700 hover:shadow-sm active:scale-[0.98]"
+                  disabled={
+                    isSubmitting
+                  }
+                  className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:bg-red-700 hover:shadow-sm active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Hapus Barang
+                  {isSubmitting
+                    ? "Menghapus..."
+                    : "Hapus Barang"}
                 </button>
               </div>
             </div>
@@ -1369,7 +1648,8 @@ export default function BarangPage() {
         <div className="pointer-events-none fixed bottom-6 left-1/2 z-[200] -translate-x-1/2 animate-in fade-in slide-in-from-bottom-3 duration-300 ease-out">
           <div
             className={`flex min-w-[280px] items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white shadow-lg ring-1 ring-white/10 ${
-              toast.type === "success"
+              toast.type ===
+              "success"
                 ? "bg-slate-900"
                 : "bg-red-600"
             }`}
@@ -1409,7 +1689,7 @@ function SummaryCard({
   warning,
   danger,
 }: {
-  icon: React.ElementType;
+  icon: ElementType;
   title: string;
   value: string;
   description: string;
@@ -1478,7 +1758,7 @@ function Modal({
 }: {
   title: string;
   description: string;
-  children: React.ReactNode;
+  children: ReactNode;
   onClose: () => void;
 }) {
   return (
@@ -1541,7 +1821,9 @@ function InputField({
         type={type}
         value={value}
         onChange={(e) =>
-          onChange(e.target.value)
+          onChange(
+            e.target.value
+          )
         }
         placeholder={placeholder}
         required={required}
@@ -1580,18 +1862,22 @@ function SelectField({
       <select
         value={value}
         onChange={(e) =>
-          onChange(e.target.value)
+          onChange(
+            e.target.value
+          )
         }
         className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-all duration-200 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
       >
-        {options.map((option) => (
-          <option
-            key={option}
-            value={option}
-          >
-            {option}
-          </option>
-        ))}
+        {options.map(
+          (option) => (
+            <option
+              key={option}
+              value={option}
+            >
+              {option}
+            </option>
+          )
+        )}
       </select>
     </div>
   );
@@ -1621,7 +1907,9 @@ function TextareaField({
       <textarea
         value={value}
         onChange={(e) =>
-          onChange(e.target.value)
+          onChange(
+            e.target.value
+          )
         }
         placeholder={placeholder}
         rows={3}
@@ -1638,23 +1926,27 @@ function TextareaField({
 function ModalActions({
   onCancel,
   submitText,
+  disabled = false,
 }: {
   onCancel: () => void;
   submitText: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
       <button
         type="button"
         onClick={onCancel}
-        className="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 transition-all duration-200 hover:bg-slate-100 hover:text-slate-800 active:scale-[0.98]"
+        disabled={disabled}
+        className="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 transition-all duration-200 hover:bg-slate-100 hover:text-slate-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
       >
         Batal
       </button>
 
       <button
         type="submit"
-        className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:bg-indigo-700 hover:shadow-md active:scale-[0.98]"
+        disabled={disabled}
+        className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:bg-indigo-700 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitText}
       </button>
