@@ -12,6 +12,9 @@ import {
   Store,
   LogOut,
   AlertTriangle,
+  ShieldCheck,
+  Mail,
+  MessageCircle,
 } from "lucide-react";
 
 import {
@@ -21,12 +24,20 @@ import {
 
 import { AuthSession } from "@/features/user/types";
 
+/* =========================================================
+   TYPES
+========================================================= */
+
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
 }
 
-const menus = [
+/* =========================================================
+   MENU UTAMA
+========================================================= */
+
+const mainMenus = [
   {
     name: "Dashboard",
     path: "/dashboard",
@@ -44,6 +55,32 @@ const menus = [
   },
 ];
 
+/* =========================================================
+   MENU MANAJEMEN
+========================================================= */
+
+const managementMenus = [
+  {
+    name: "Hak Akses",
+    path: "/hak-akses",
+    icon: ShieldCheck,
+  },
+  {
+    name: "Mail",
+    path: "/mail",
+    icon: Mail,
+  },
+  {
+    name: "Chat",
+    path: "/chat",
+    icon: MessageCircle,
+  },
+];
+
+/* =========================================================
+   COMPONENT
+========================================================= */
+
 export default function Sidebar({
   open,
   onClose,
@@ -60,9 +97,17 @@ export default function Sidebar({
   const [isLoggingOut, setIsLoggingOut] =
     useState(false);
 
+  /* =======================================================
+     GET SESSION
+  ======================================================= */
+
   useEffect(() => {
     setSession(getSession());
   }, []);
+
+  /* =======================================================
+     LOGOUT
+  ======================================================= */
 
   const handleLogout = () => {
     setIsLoggingOut(true);
@@ -73,9 +118,79 @@ export default function Sidebar({
     }, 300);
   };
 
+  /* =======================================================
+     CHECK ACTIVE MENU
+  ======================================================= */
+
+  const isMenuActive = (path: string) => {
+    return (
+      pathname === path ||
+      pathname.startsWith(`${path}/`)
+    );
+  };
+
+  /* =======================================================
+     USER INITIALS
+  ======================================================= */
+
+  const getInitials = () => {
+    if (!session?.nama_lengkap) {
+      return "US";
+    }
+
+    const words = session.nama_lengkap
+      .trim()
+      .split(/\s+/);
+
+    if (words.length >= 2) {
+      return `${words[0][0]}${words[1][0]}`.toUpperCase();
+    }
+
+    return words[0]
+      .slice(0, 2)
+      .toUpperCase();
+  };
+
+  /* =======================================================
+     RENDER MENU
+  ======================================================= */
+
+  const renderMenus = (
+    menus: typeof mainMenus
+  ) => {
+    return menus.map((menu) => {
+      const Icon = menu.icon;
+
+      const isActive = isMenuActive(menu.path);
+
+      return (
+        <Link
+          key={menu.path}
+          href={menu.path}
+          onClick={onClose}
+          className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+            isActive
+              ? "bg-slate-900 text-white shadow-sm"
+              : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+          }`}
+        >
+          <Icon
+            size={18}
+            strokeWidth={1.9}
+            className="shrink-0 transition-transform duration-200 group-hover:scale-105"
+          />
+
+          <span>{menu.name}</span>
+        </Link>
+      );
+    });
+  };
+
   return (
     <>
-      {/* MOBILE OVERLAY */}
+      {/* =====================================================
+          MOBILE OVERLAY
+      ===================================================== */}
 
       <div
         className={`fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px] transition-all duration-300 lg:hidden ${
@@ -86,7 +201,9 @@ export default function Sidebar({
         onClick={onClose}
       />
 
-      {/* SIDEBAR */}
+      {/* =====================================================
+          SIDEBAR
+      ===================================================== */}
 
       <aside
         className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform duration-300 ease-out lg:translate-x-0 ${
@@ -95,9 +212,11 @@ export default function Sidebar({
             : "-translate-x-full"
         }`}
       >
-        {/* Logo */}
+        {/* ===================================================
+            LOGO
+        =================================================== */}
 
-        <div className="flex h-16 items-center justify-between border-b border-slate-100 px-5">
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-100 px-5">
           <Link
             href="/dashboard"
             onClick={onClose}
@@ -106,6 +225,7 @@ export default function Sidebar({
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 transition duration-200 group-hover:scale-105">
               <Store
                 size={18}
+                strokeWidth={2}
                 className="text-white"
               />
             </div>
@@ -121,6 +241,8 @@ export default function Sidebar({
             </div>
           </Link>
 
+          {/* MOBILE CLOSE */}
+
           <button
             type="button"
             onClick={onClose}
@@ -130,59 +252,55 @@ export default function Sidebar({
           </button>
         </div>
 
-        {/* Navigation */}
+        {/* ===================================================
+            NAVIGATION
+        =================================================== */}
 
         <nav className="flex-1 overflow-y-auto px-3 py-5">
+          {/* =================================================
+              MENU UTAMA
+          ================================================= */}
+
           <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
             Menu Utama
           </p>
 
           <div className="space-y-1">
-            {menus.map((menu) => {
-              const Icon = menu.icon;
+            {renderMenus(mainMenus)}
+          </div>
 
-              const isActive =
-                pathname === menu.path ||
-                pathname.startsWith(
-                  `${menu.path}/`
-                );
+          {/* =================================================
+              MANAJEMEN
+          ================================================= */}
 
-              return (
-                <Link
-                  key={menu.path}
-                  href={menu.path}
-                  onClick={onClose}
-                  className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
-                    isActive
-                      ? "bg-slate-900 text-white shadow-sm"
-                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  <Icon
-                    size={18}
-                    className="transition-transform duration-200 group-hover:scale-105"
-                  />
+          <div className="mt-7">
+            <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Manajemen
+            </p>
 
-                  <span>{menu.name}</span>
-                </Link>
-              );
-            })}
+            <div className="space-y-1">
+              {renderMenus(managementMenus)}
+            </div>
           </div>
         </nav>
 
-        {/* User */}
+        {/* ===================================================
+            USER SECTION
+        =================================================== */}
 
-        <div className="border-t border-slate-100 p-3">
+        <div className="shrink-0 border-t border-slate-100 p-3">
+          {/* USER INFORMATION */}
+
           <div className="mb-2 flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-3 transition duration-200 hover:bg-slate-100">
+            {/* AVATAR */}
+
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-600">
-              {session?.nama_lengkap
-                ? session.nama_lengkap
-                    .slice(0, 2)
-                    .toUpperCase()
-                : "US"}
+              {getInitials()}
             </div>
 
-            <div className="min-w-0">
+            {/* USER INFO */}
+
+            <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-slate-800">
                 {session?.nama_lengkap ??
                   "Pengguna"}
@@ -194,6 +312,8 @@ export default function Sidebar({
               </p>
             </div>
           </div>
+
+          {/* LOGOUT */}
 
           <button
             type="button"
@@ -212,11 +332,15 @@ export default function Sidebar({
         </div>
       </aside>
 
-      {/* LOGOUT MODAL */}
+      {/* =====================================================
+          LOGOUT MODAL
+      ===================================================== */}
 
       {showLogoutModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[3px] animate-in fade-in duration-200">
-          <div className="w-full max-w-sm animate-in zoom-in-95 slide-in-from-bottom-2 duration-200 rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-sm animate-in zoom-in-95 slide-in-from-bottom-2 rounded-2xl bg-white p-6 shadow-2xl duration-200">
+            {/* ICON */}
+
             <div className="flex justify-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
                 <AlertTriangle
@@ -225,6 +349,8 @@ export default function Sidebar({
                 />
               </div>
             </div>
+
+            {/* CONTENT */}
 
             <div className="mt-4 text-center">
               <h2 className="text-lg font-semibold text-slate-900">
@@ -238,7 +364,11 @@ export default function Sidebar({
               </p>
             </div>
 
+            {/* ACTION */}
+
             <div className="mt-6 flex gap-3">
+              {/* BATAL */}
+
               <button
                 type="button"
                 disabled={isLoggingOut}
@@ -249,6 +379,8 @@ export default function Sidebar({
               >
                 Batal
               </button>
+
+              {/* KELUAR */}
 
               <button
                 type="button"

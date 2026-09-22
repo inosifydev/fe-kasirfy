@@ -2,47 +2,44 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Minus,
-  Plus,
   Search,
-  ShoppingCart,
+  Plus,
+  Minus,
   Trash2,
+  ShoppingCart,
   X,
   CreditCard,
   Banknote,
-  CheckCircle2,
   Package,
-  Receipt,
-  Sparkles,
+  CheckCircle2,
   AlertCircle,
+  Loader2,
+  ArrowLeftRight,
+  QrCode,
 } from "lucide-react";
 
-interface Barang {
+import { getSession } from "@/lib/auth";
+
+/* =========================================================
+   TYPES
+========================================================= */
+
+type Barang = {
   id_barang: string;
   nama_barang: string;
   kategori: string;
   harga: number;
   stok: number;
   satuan: string;
-  deskripsi: string;
-  created_at: string;
-}
+  deskripsi?: string | null;
+  created_at?: string;
+};
 
-interface CartItem extends Barang {
+type CartItem = Barang & {
   jumlah: number;
-  subtotal: number;
-}
+};
 
-interface Transaksi {
-  id_transaksi: string;
-  id_user: string;
-  tanggal_transaksi: string;
-  total_harga: number;
-  status: string;
-  created_at: string;
-}
-
-interface DetailTransaksi {
+type DetailTransaksi = {
   id_detail_transaksi: string;
   id_transaksi: string;
   id_barang: string;
@@ -50,220 +47,193 @@ interface DetailTransaksi {
   harga_satuan: number;
   subtotal: number;
   created_at: string;
-}
-
-/* =========================
-   DUMMY USER
-========================= */
-
-const dummyUser = {
-  id_user: crypto.randomUUID(),
-  username: "admin",
-  nama_lengkap: "Administrator",
+  tb_barang?: Barang;
 };
 
-/* =========================
-   DUMMY BARANG
-========================= */
+type Transaksi = {
+  id_transaksi: string;
+  id_user: string | null;
+  tanggal_transaksi: string;
+  total_harga: number;
+  status: string;
+  created_at: string;
+  jenis_pembayaran?: string;
+  dibayar?: number;
+  kembalian?: number;
+  status_pembayaran?: string;
+  tb_detail_transaksi?: DetailTransaksi[];
+};
 
-const initialBarang: Barang[] = [
-  {
-    id_barang: crypto.randomUUID(),
-    nama_barang: "Indomie Goreng",
-    kategori: "Makanan",
-    harga: 3000,
-    stok: 120,
-    satuan: "pcs",
-    deskripsi: "Mi instan goreng",
-    created_at: "2026-09-01",
-  },
-  {
-    id_barang: crypto.randomUUID(),
-    nama_barang: "Aqua 600ml",
-    kategori: "Minuman",
-    harga: 3000,
-    stok: 85,
-    satuan: "botol",
-    deskripsi: "Air mineral 600ml",
-    created_at: "2026-09-01",
-  },
-  {
-    id_barang: crypto.randomUUID(),
-    nama_barang: "Teh Pucuk Harum",
-    kategori: "Minuman",
-    harga: 4000,
-    stok: 61,
-    satuan: "botol",
-    deskripsi: "Teh kemasan",
-    created_at: "2026-09-02",
-  },
-  {
-    id_barang: crypto.randomUUID(),
-    nama_barang: "Kopi Good Day",
-    kategori: "Minuman",
-    harga: 4000,
-    stok: 48,
-    satuan: "pcs",
-    deskripsi: "Kopi instan",
-    created_at: "2026-09-02",
-  },
-  {
-    id_barang: crypto.randomUUID(),
-    nama_barang: "Roti Coklat",
-    kategori: "Makanan",
-    harga: 5000,
-    stok: 35,
-    satuan: "pcs",
-    deskripsi: "Roti isi coklat",
-    created_at: "2026-09-03",
-  },
-  {
-    id_barang: crypto.randomUUID(),
-    nama_barang: "Chitato Original",
-    kategori: "Snack",
-    harga: 11000,
-    stok: 27,
-    satuan: "pcs",
-    deskripsi: "Keripik kentang",
-    created_at: "2026-09-03",
-  },
-  {
-    id_barang: crypto.randomUUID(),
-    nama_barang: "SilverQueen",
-    kategori: "Snack",
-    harga: 15000,
-    stok: 18,
-    satuan: "pcs",
-    deskripsi: "Cokelat batang",
-    created_at: "2026-09-04",
-  },
-  {
-    id_barang: crypto.randomUUID(),
-    nama_barang: "Susu Ultra Milk",
-    kategori: "Minuman",
-    harga: 7000,
-    stok: 8,
-    satuan: "kotak",
-    deskripsi: "Susu UHT",
-    created_at: "2026-09-04",
-  },
-  {
-    id_barang: crypto.randomUUID(),
-    nama_barang: "Sabun Lifebuoy",
-    kategori: "Kebutuhan",
-    harga: 4500,
-    stok: 4,
-    satuan: "pcs",
-    deskripsi: "Sabun mandi",
-    created_at: "2026-09-04",
-  },
-];
+type PaymentMethod =
+  | "tunai"
+  | "qris"
+  | "debit"
+  | "transfer";
 
-/* =========================
-   CATEGORY
-========================= */
+/* =========================================================
+   HELPERS
+========================================================= */
 
-const categories = [
-  "Semua",
-  "Makanan",
-  "Minuman",
-  "Snack",
-  "Kebutuhan",
-];
+const formatRupiah = (value: number) => {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(value);
+};
 
-/* =========================
-   QUICK PAYMENT
-========================= */
-
-const quickPayments = [
-  10000,
-  20000,
-  50000,
-  100000,
-];
+/* =========================================================
+   PAGE
+========================================================= */
 
 export default function TransaksiPage() {
-  const [barang, setBarang] =
-    useState<Barang[]>(initialBarang);
+  /* =======================================================
+     STATE BARANG
+  ======================================================= */
+
+  const [barang, setBarang] = useState<Barang[]>([]);
+  const [loadingBarang, setLoadingBarang] = useState(true);
+  const [barangError, setBarangError] = useState("");
+
+  /* =======================================================
+     SEARCH & FILTER
+  ======================================================= */
+
+  const [search, setSearch] = useState("");
+  const [kategori, setKategori] = useState("Semua");
+
+  /* =======================================================
+     CART
+  ======================================================= */
 
   const [cart, setCart] = useState<CartItem[]>([]);
 
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("Semua");
+  /* =======================================================
+     PAYMENT
+  ======================================================= */
 
   const [showPaymentModal, setShowPaymentModal] =
     useState(false);
 
   const [payment, setPayment] = useState("");
 
-  const [transactionSuccess, setTransactionSuccess] =
+  const [paymentMethod, setPaymentMethod] =
+    useState<PaymentMethod>("tunai");
+
+  const [paymentError, setPaymentError] =
+    useState("");
+
+  const [processingPayment, setProcessingPayment] =
     useState(false);
 
-  const [lastTransaction, setLastTransaction] =
+  /* =======================================================
+     SUCCESS
+  ======================================================= */
+
+  const [showSuccessModal, setShowSuccessModal] =
+    useState(false);
+
+  const [transaction, setTransaction] =
     useState<Transaksi | null>(null);
 
-  const [lastDetails, setLastDetails] =
-    useState<DetailTransaksi[]>([]);
+  /* =======================================================
+     GENERAL ERROR
+  ======================================================= */
 
-  const [toast, setToast] = useState<string | null>(
-    null
-  );
+  const [toast, setToast] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
-  const [isProcessing, setIsProcessing] =
-    useState(false);
+  /* =======================================================
+     FETCH BARANG
+  ======================================================= */
 
-  const [isCartOpen, setIsCartOpen] = useState(false);
+  const fetchBarang = async () => {
+    try {
+      setLoadingBarang(true);
+      setBarangError("");
 
-  const [selectedProduct, setSelectedProduct] =
-    useState<string | null>(null);
+      const response = await fetch(
+        "/api/backend/barang",
+        {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        }
+      );
 
-  /* =========================
-     TOAST
-  ========================= */
+      const result = await response.json();
 
-  const showToast = (message: string) => {
-    setToast(message);
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result?.message ||
+            "Gagal mengambil data barang."
+        );
+      }
 
-    setTimeout(() => {
-      setToast(null);
-    }, 1800);
+      /*
+       * Backend bisa mengembalikan:
+       *
+       * data: [...]
+       *
+       * atau:
+       *
+       * data: {
+       *   data: [...]
+       * }
+       */
+
+      let dataBarang: Barang[] = [];
+
+      if (Array.isArray(result.data)) {
+        dataBarang = result.data;
+      } else if (
+        Array.isArray(result.data?.data)
+      ) {
+        dataBarang = result.data.data;
+      }
+
+      setBarang(dataBarang);
+    } catch (error) {
+      console.error(
+        "FETCH BARANG ERROR:",
+        error
+      );
+
+      setBarangError(
+        error instanceof Error
+          ? error.message
+          : "Gagal mengambil data barang."
+      );
+    } finally {
+      setLoadingBarang(false);
+    }
   };
 
-  /* =========================
-     ESC CLOSE
-  ========================= */
-
   useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
-        return;
-      }
+    fetchBarang();
+  }, []);
 
-      if (showPaymentModal) {
-        setShowPaymentModal(false);
-      }
+  /* =======================================================
+     CATEGORIES
+  ======================================================= */
 
-      if (isCartOpen) {
-        setIsCartOpen(false);
-      }
-    };
-
-    window.addEventListener(
-      "keydown",
-      handleEscape
+  const categories = useMemo(() => {
+    const uniqueCategories = Array.from(
+      new Set(
+        barang
+          .map((item) => item.kategori)
+          .filter(Boolean)
+      )
     );
 
-    return () => {
-      window.removeEventListener(
-        "keydown",
-        handleEscape
-      );
-    };
-  }, [showPaymentModal, isCartOpen]);
+    return ["Semua", ...uniqueCategories];
+  }, [barang]);
 
-  /* =========================
+  /* =======================================================
      FILTER BARANG
-  ========================= */
+  ======================================================= */
 
   const filteredBarang = useMemo(() => {
     return barang.filter((item) => {
@@ -272,1257 +242,1777 @@ export default function TransaksiPage() {
         .includes(search.toLowerCase());
 
       const matchCategory =
-        category === "Semua" ||
-        item.kategori === category;
+        kategori === "Semua" ||
+        item.kategori === kategori;
 
       return matchSearch && matchCategory;
     });
-  }, [barang, search, category]);
+  }, [barang, search, kategori]);
 
-  /* =========================
-     TOTAL
-  ========================= */
+  /* =======================================================
+     CART TOTAL
+  ======================================================= */
 
-  const totalItem = cart.reduce(
-    (total, item) => total + item.jumlah,
-    0
-  );
+  const totalHarga = useMemo(() => {
+    return cart.reduce(
+      (total, item) =>
+        total + item.harga * item.jumlah,
+      0
+    );
+  }, [cart]);
 
-  const totalHarga = cart.reduce(
-    (total, item) => total + item.subtotal,
-    0
-  );
+  const totalItem = useMemo(() => {
+    return cart.reduce(
+      (total, item) =>
+        total + item.jumlah,
+      0
+    );
+  }, [cart]);
 
-  const paymentAmount = Number(payment) || 0;
+  /* =======================================================
+     PAYMENT VALUE
+  ======================================================= */
 
-  const change =
+  /*
+   * Untuk tunai:
+   * nominal berasal dari input user.
+   *
+   * Untuk QRIS / Debit / Transfer:
+   * nominal dianggap sama dengan total transaksi.
+   */
+
+  const paymentAmount =
+    paymentMethod === "tunai"
+      ? Number(payment || 0)
+      : totalHarga;
+
+  const kembalian =
+    paymentMethod === "tunai" &&
     paymentAmount >= totalHarga
       ? paymentAmount - totalHarga
       : 0;
 
-  /* =========================
-     FORMAT RUPIAH
-  ========================= */
-
-  const formatRupiah = (value: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
-
-  /* =========================
-     TAMBAH KE KERANJANG
-  ========================= */
+  /* =======================================================
+     ADD TO CART
+  ======================================================= */
 
   const addToCart = (item: Barang) => {
     if (item.stok <= 0) {
-      showToast("Stok barang habis");
+      showToast(
+        "error",
+        "Stok barang habis."
+      );
       return;
     }
 
-    const existing = cart.find(
-      (cartItem) =>
-        cartItem.id_barang === item.id_barang
-    );
-
-    if (existing) {
-      if (existing.jumlah >= item.stok) {
-        showToast(
-          `Stok ${item.nama_barang} tidak mencukupi`
+    setCart((currentCart) => {
+      const existingItem =
+        currentCart.find(
+          (cartItem) =>
+            cartItem.id_barang ===
+            item.id_barang
         );
-        return;
+
+      if (existingItem) {
+        if (
+          existingItem.jumlah >=
+          item.stok
+        ) {
+          showToast(
+            "error",
+            `Stok ${item.nama_barang} hanya tersedia ${item.stok}.`
+          );
+
+          return currentCart;
+        }
+
+        return currentCart.map(
+          (cartItem) =>
+            cartItem.id_barang ===
+            item.id_barang
+              ? {
+                  ...cartItem,
+                  jumlah:
+                    cartItem.jumlah + 1,
+                }
+              : cartItem
+        );
       }
 
-      setCart((prev) =>
-        prev.map((cartItem) =>
-          cartItem.id_barang === item.id_barang
-            ? {
-                ...cartItem,
-                jumlah: cartItem.jumlah + 1,
-                subtotal:
-                  (cartItem.jumlah + 1) *
-                  cartItem.harga,
-              }
-            : cartItem
-        )
-      );
-
-      setSelectedProduct(item.id_barang);
-
-      setTimeout(() => {
-        setSelectedProduct(null);
-      }, 300);
-
-      showToast(`${item.nama_barang} ditambahkan`);
-
-      return;
-    }
-
-    setCart((prev) => [
-      ...prev,
-      {
-        ...item,
-        jumlah: 1,
-        subtotal: item.harga,
-      },
-    ]);
-
-    setSelectedProduct(item.id_barang);
-
-    setTimeout(() => {
-      setSelectedProduct(null);
-    }, 300);
-
-    showToast(`${item.nama_barang} ditambahkan`);
+      return [
+        ...currentCart,
+        {
+          ...item,
+          jumlah: 1,
+        },
+      ];
+    });
   };
 
-  /* =========================
-     TAMBAH JUMLAH
-  ========================= */
+  /* =======================================================
+     INCREASE CART
+  ======================================================= */
 
-  const increaseQuantity = (id_barang: string) => {
-    setCart((prev) =>
-      prev.map((item) => {
-        if (item.id_barang !== id_barang) {
+  const increaseQuantity = (
+    id_barang: string
+  ) => {
+    setCart((currentCart) =>
+      currentCart.map((item) => {
+        if (
+          item.id_barang !==
+          id_barang
+        ) {
           return item;
         }
 
         if (item.jumlah >= item.stok) {
-          showToast("Jumlah sudah mencapai stok");
+          showToast(
+            "error",
+            `Stok ${item.nama_barang} hanya tersedia ${item.stok}.`
+          );
+
           return item;
         }
 
-        const jumlahBaru = item.jumlah + 1;
-
         return {
           ...item,
-          jumlah: jumlahBaru,
-          subtotal: jumlahBaru * item.harga,
+          jumlah: item.jumlah + 1,
         };
       })
     );
   };
 
-  /* =========================
-     KURANGI JUMLAH
-  ========================= */
+  /* =======================================================
+     DECREASE CART
+  ======================================================= */
 
-  const decreaseQuantity = (id_barang: string) => {
-    setCart((prev) =>
-      prev
-        .map((item) => {
-          if (item.id_barang !== id_barang) {
-            return item;
-          }
-
-          const jumlahBaru = item.jumlah - 1;
-
-          return {
-            ...item,
-            jumlah: jumlahBaru,
-            subtotal: jumlahBaru * item.harga,
-          };
-        })
-        .filter((item) => item.jumlah > 0)
+  const decreaseQuantity = (
+    id_barang: string
+  ) => {
+    setCart((currentCart) =>
+      currentCart
+        .map((item) =>
+          item.id_barang ===
+          id_barang
+            ? {
+                ...item,
+                jumlah:
+                  item.jumlah - 1,
+              }
+            : item
+        )
+        .filter(
+          (item) => item.jumlah > 0
+        )
     );
   };
 
-  /* =========================
-     HAPUS DARI KERANJANG
-  ========================= */
+  /* =======================================================
+     REMOVE CART
+  ======================================================= */
 
-  const removeFromCart = (id_barang: string) => {
-    const item = cart.find(
-      (cartItem) =>
-        cartItem.id_barang === id_barang
-    );
-
-    setCart((prev) =>
-      prev.filter(
-        (cartItem) =>
-          cartItem.id_barang !== id_barang
+  const removeFromCart = (
+    id_barang: string
+  ) => {
+    setCart((currentCart) =>
+      currentCart.filter(
+        (item) =>
+          item.id_barang !==
+          id_barang
       )
     );
-
-    if (item) {
-      showToast(`${item.nama_barang} dihapus`);
-    }
   };
 
-  /* =========================
-     KOSONGKAN KERANJANG
-  ========================= */
+  /* =======================================================
+     CLEAR CART
+  ======================================================= */
 
   const clearCart = () => {
-    if (cart.length === 0) {
-      return;
-    }
-
     setCart([]);
-    showToast("Keranjang dikosongkan");
   };
 
-  /* =========================
-     PROSES PEMBAYARAN
-  ========================= */
+  /* =======================================================
+     OPEN PAYMENT
+  ======================================================= */
 
-  const handlePayment = () => {
-    if (paymentAmount < totalHarga) {
+  const openPaymentModal = () => {
+    if (cart.length === 0) {
+      showToast(
+        "error",
+        "Keranjang masih kosong."
+      );
       return;
     }
 
-    setIsProcessing(true);
+    setPayment("");
+    setPaymentError("");
+    setPaymentMethod("tunai");
+    setShowPaymentModal(true);
+  };
 
-    setTimeout(() => {
-      const idTransaksi =
-        crypto.randomUUID();
+  /* =======================================================
+     CLOSE PAYMENT
+  ======================================================= */
 
-      /* =========================
-         DATA TB_TRANSAKSI
-      ========================= */
+  const closePaymentModal = () => {
+    if (processingPayment) {
+      return;
+    }
 
-      const transaksi: Transaksi = {
-        id_transaksi: idTransaksi,
-        id_user: dummyUser.id_user,
-        tanggal_transaksi:
-          new Date().toISOString(),
-        total_harga: totalHarga,
-        status: "selesai",
-        created_at:
-          new Date().toISOString(),
-      };
+    setShowPaymentModal(false);
+    setPayment("");
+    setPaymentError("");
+  };
 
-      /* =========================
-         DATA TB_DETAIL_TRANSAKSI
-      ========================= */
+  /* =======================================================
+     PAYMENT INPUT
+  ======================================================= */
 
-      const detail: DetailTransaksi[] =
-        cart.map((item) => ({
-          id_detail_transaksi:
-            crypto.randomUUID(),
-          id_transaksi: idTransaksi,
-          id_barang: item.id_barang,
-          jumlah: item.jumlah,
-          harga_satuan: item.harga,
-          subtotal: item.subtotal,
-          created_at:
-            new Date().toISOString(),
-        }));
+  const handlePaymentChange = (
+    value: string
+  ) => {
+    /*
+     * Hanya izinkan angka.
+     */
 
-      setLastTransaction(transaksi);
-      setLastDetails(detail);
-
-      /* =========================
-         UPDATE STOK DUMMY
-      ========================= */
-
-      setBarang((prev) =>
-        prev.map((barangItem) => {
-          const cartItem = cart.find(
-            (item) =>
-              item.id_barang ===
-              barangItem.id_barang
-          );
-
-          if (!cartItem) {
-            return barangItem;
-          }
-
-          return {
-            ...barangItem,
-            stok:
-              barangItem.stok -
-              cartItem.jumlah,
-          };
-        })
+    const numericValue =
+      value.replace(
+        /[^0-9]/g,
+        ""
       );
 
-      setIsProcessing(false);
-      setShowPaymentModal(false);
-      setTransactionSuccess(true);
-    }, 600);
+    setPayment(numericValue);
+    setPaymentError("");
   };
 
-  /* =========================
-     TRANSAKSI BARU
-  ========================= */
-
-  const resetTransaction = () => {
-    setCart([]);
-    setPayment("");
-    setTransactionSuccess(false);
-    setLastTransaction(null);
-    setLastDetails([]);
-    setIsCartOpen(false);
-  };
-
-  /* =========================
+  /* =======================================================
      QUICK PAYMENT
-  ========================= */
+  ======================================================= */
 
-  const handleQuickPayment = (
+  const setQuickPayment = (
     amount: number
   ) => {
     setPayment(String(amount));
+    setPaymentError("");
   };
 
+  /* =======================================================
+     PAYMENT METHOD
+  ======================================================= */
+
+  const handlePaymentMethodChange = (
+    method: PaymentMethod
+  ) => {
+    setPaymentMethod(method);
+    setPaymentError("");
+
+    /*
+     * Kalau bukan tunai,
+     * input pembayaran tidak diperlukan.
+     */
+
+    if (method !== "tunai") {
+      setPayment("");
+    }
+  };
+
+  /* =======================================================
+     HANDLE PAYMENT
+  ======================================================= */
+
+  const handlePayment = async () => {
+    setPaymentError("");
+
+    if (cart.length === 0) {
+      setPaymentError(
+        "Keranjang masih kosong."
+      );
+      return;
+    }
+
+    /*
+     * Validasi hanya berlaku
+     * untuk pembayaran tunai.
+     */
+
+    if (
+      paymentMethod === "tunai" &&
+      paymentAmount <= 0
+    ) {
+      setPaymentError(
+        "Masukkan nominal pembayaran."
+      );
+      return;
+    }
+
+    if (
+      paymentMethod === "tunai" &&
+      paymentAmount < totalHarga
+    ) {
+      setPaymentError(
+        `Pembayaran kurang ${formatRupiah(
+          totalHarga - paymentAmount
+        )}.`
+      );
+      return;
+    }
+
+    const session = getSession();
+
+    if (!session) {
+      setPaymentError(
+        "Session pengguna tidak ditemukan. Silakan login kembali."
+      );
+      return;
+    }
+
+    if (!session.id_user) {
+      setPaymentError(
+        "ID user tidak ditemukan pada session."
+      );
+      return;
+    }
+
+    try {
+      setProcessingPayment(true);
+
+      /*
+       * Payload dikirim ke backend.
+       *
+       * Contoh tunai:
+       *
+       * {
+       *   id_user: "...",
+       *   jenis_pembayaran: "tunai",
+       *   dibayar: 100000,
+       *   items: [...]
+       * }
+       *
+       * Contoh QRIS:
+       *
+       * {
+       *   id_user: "...",
+       *   jenis_pembayaran: "qris",
+       *   dibayar: 50000,
+       *   items: [...]
+       * }
+       */
+
+      const payload = {
+        id_user: session.id_user,
+
+        jenis_pembayaran:
+          paymentMethod,
+
+        dibayar:
+          paymentMethod === "tunai"
+            ? paymentAmount
+            : totalHarga,
+
+        items: cart.map((item) => ({
+          id_barang:
+            item.id_barang,
+          jumlah: item.jumlah,
+        })),
+      };
+
+      console.log(
+        "ORDER PAYLOAD:",
+        payload
+      );
+
+      const response = await fetch(
+        "/api/backend/orders",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify(
+            payload
+          ),
+        }
+      );
+
+      const result =
+        await response.json();
+
+      console.log(
+        "ORDER RESPONSE:",
+        result
+      );
+
+      if (
+        !response.ok ||
+        !result.success
+      ) {
+        throw new Error(
+          result?.message ||
+            "Gagal membuat transaksi."
+        );
+      }
+
+      /*
+       * Response backend:
+       *
+       * data: {
+       *   id_transaksi,
+       *   id_user,
+       *   tanggal_transaksi,
+       *   total_harga,
+       *   status,
+       *   jenis_pembayaran,
+       *   dibayar,
+       *   kembalian,
+       *   ...
+       * }
+       */
+
+      const orderData =
+        result.data;
+
+      const newTransaction: Transaksi =
+        {
+          id_transaksi:
+            orderData.id_transaksi,
+
+          id_user:
+            orderData.id_user ??
+            session.id_user,
+
+          tanggal_transaksi:
+            orderData.tanggal_transaksi ??
+            new Date().toISOString(),
+
+          total_harga:
+            Number(
+              orderData.total_harga ??
+                totalHarga
+            ),
+
+          status:
+            orderData.status ??
+            "selesai",
+
+          created_at:
+            orderData.created_at ??
+            new Date().toISOString(),
+
+          jenis_pembayaran:
+            orderData.jenis_pembayaran ??
+            paymentMethod,
+
+          dibayar:
+            Number(
+              orderData.dibayar ??
+                paymentAmount
+            ),
+
+          kembalian:
+            Number(
+              orderData.kembalian ??
+                kembalian
+            ),
+
+          status_pembayaran:
+            orderData.status_pembayaran ??
+            "lunas",
+
+          tb_detail_transaksi:
+            orderData.tb_detail_transaksi ??
+            [],
+        };
+
+      setTransaction(
+        newTransaction
+      );
+
+      /*
+       * Tutup payment modal
+       */
+
+      setShowPaymentModal(false);
+
+      /*
+       * Tampilkan success modal
+       */
+
+      setShowSuccessModal(true);
+
+      /*
+       * Bersihkan cart
+       */
+
+      setCart([]);
+
+      /*
+       * Reset payment
+       */
+
+      setPayment("");
+
+      /*
+       * Reset metode ke tunai
+       * untuk transaksi berikutnya.
+       */
+
+      setPaymentMethod("tunai");
+
+      /*
+       * Ambil ulang data barang
+       * agar stok sesuai database.
+       */
+
+      await fetchBarang();
+
+      showToast(
+        "success",
+        "Transaksi berhasil dibuat."
+      );
+    } catch (error) {
+      console.error(
+        "CREATE ORDER ERROR:",
+        error
+      );
+
+      setPaymentError(
+        error instanceof Error
+          ? error.message
+          : "Gagal membuat transaksi."
+      );
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
+  /* =======================================================
+     TOAST
+  ======================================================= */
+
+  const showToast = (
+    type: "success" | "error",
+    message: string
+  ) => {
+    setToast({
+      type,
+      message,
+    });
+
+    setTimeout(() => {
+      setToast(null);
+    }, 3000);
+  };
+
+  /* =======================================================
+     STATUS BARANG
+  ======================================================= */
+
+  const getStockStatus = (
+    stok: number
+  ) => {
+    if (stok <= 0) {
+      return {
+        label: "Habis",
+        className:
+          "bg-red-50 text-red-600",
+      };
+    }
+
+    if (stok <= 10) {
+      return {
+        label: "Menipis",
+        className:
+          "bg-amber-50 text-amber-600",
+      };
+    }
+
+    return {
+      label: "Tersedia",
+      className:
+        "bg-emerald-50 text-emerald-600",
+    };
+  };
+
+  /* =======================================================
+     RENDER
+  ======================================================= */
+
   return (
-    <>
-      <main className="min-h-full bg-slate-50 p-4 sm:p-6 lg:p-8">
-        <div className="mx-auto max-w-[1600px]">
-          {/* =========================
-              MOBILE CART BUTTON
-          ========================= */}
+    <div className="min-h-full bg-slate-50">
+      {/* ===================================================
+          TOAST
+      =================================================== */}
 
-          <button
-            type="button"
-            onClick={() => setIsCartOpen(true)}
-            className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-200 transition hover:scale-105 hover:bg-indigo-700 active:scale-95 lg:hidden"
+      {toast && (
+        <div className="fixed right-5 top-5 z-[100]">
+          <div
+            className={`flex items-center gap-3 rounded-xl border bg-white px-4 py-3 shadow-lg ${
+              toast.type === "success"
+                ? "border-emerald-200"
+                : "border-red-200"
+            }`}
           >
-            <ShoppingCart size={21} />
-
-            {totalItem > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
-                {totalItem}
-              </span>
+            {toast.type ===
+            "success" ? (
+              <CheckCircle2
+                size={20}
+                className="text-emerald-500"
+              />
+            ) : (
+              <AlertCircle
+                size={20}
+                className="text-red-500"
+              />
             )}
-          </button>
 
-          <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
-            {/* =========================
-                LEFT PRODUCT
-            ========================= */}
+            <p className="text-sm font-medium text-slate-700">
+              {toast.message}
+            </p>
+          </div>
+        </div>
+      )}
 
-            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              {/* HEADER */}
+      {/* ===================================================
+          HEADER
+      =================================================== */}
 
-              <div className="border-b border-slate-100 p-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50">
-                      <Receipt
-                        size={19}
-                        className="text-indigo-600"
-                      />
-                    </div>
+      <div className="border-b border-slate-200 bg-white">
+        <div className="px-6 py-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">
+                Transaksi
+              </h1>
 
-                    <div>
-                      <h1 className="text-base font-semibold text-slate-900">
-                        Buat Transaksi
-                      </h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Buat transaksi penjualan baru
+              </p>
+            </div>
 
-                      <p className="mt-0.5 text-xs text-slate-400">
-                        Pilih barang untuk ditambahkan
-                      </p>
-                    </div>
-                  </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5">
+                <Package
+                  size={18}
+                  className="text-slate-400"
+                />
 
-                  <div className="hidden items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 sm:flex">
-                    <Sparkles
-                      size={14}
-                      className="text-emerald-500"
-                    />
+                <div>
+                  <p className="text-xs text-slate-400">
+                    Produk
+                  </p>
 
-                    <span className="text-xs font-medium text-emerald-600">
-                      Kasir Aktif
-                    </span>
-                  </div>
-                </div>
-
-                {/* SEARCH */}
-
-                <div className="relative mt-5">
-                  <Search
-                    size={18}
-                    className={`absolute left-3 top-1/2 -translate-y-1/2 transition ${
-                      search
-                        ? "text-indigo-500"
-                        : "text-slate-400"
-                    }`}
-                  />
-
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) =>
-                      setSearch(e.target.value)
-                    }
-                    placeholder="Cari nama barang..."
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-10 text-sm outline-none transition placeholder:text-slate-400 text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
-                  />
-
-                  {search && (
-                    <button
-                      type="button"
-                      onClick={() => setSearch("")}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-                    >
-                      <X size={15} />
-                    </button>
-                  )}
-                </div>
-
-                {/* CATEGORY */}
-
-                <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-                  {categories.map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() =>
-                        setCategory(item)
-                      }
-                      className={`whitespace-nowrap rounded-lg px-3.5 py-2 text-xs font-medium transition-all duration-200 ${
-                        category === item
-                          ? "bg-indigo-600 text-white shadow-sm shadow-indigo-200"
-                          : "bg-slate-50 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"
-                      }`}
-                    >
-                      {item}
-                    </button>
-                  ))}
+                  <p className="text-sm font-semibold text-slate-800">
+                    {barang.length}
+                  </p>
                 </div>
               </div>
 
-              {/* PRODUCT */}
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5">
+                <ShoppingCart
+                  size={18}
+                  className="text-slate-400"
+                />
 
-              <div className="p-5">
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
-                    <h2 className="font-semibold text-slate-900">
-                      Daftar Barang
-                    </h2>
+                <div>
+                  <p className="text-xs text-slate-400">
+                    Keranjang
+                  </p>
 
-                    <p className="mt-1 text-xs text-slate-400">
-                      Klik barang untuk menambahkan
-                    </p>
-                  </div>
-
-                  <span className="rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-600">
-                    {filteredBarang.length} produk
-                  </span>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {totalItem}
+                  </p>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {filteredBarang.map((item) => {
-                    const cartItem = cart.find(
-                      (cartItem) =>
-                        cartItem.id_barang ===
-                        item.id_barang
+      {/* ===================================================
+          MAIN
+      =================================================== */}
+
+      <div className="grid min-h-[calc(100vh-140px)] grid-cols-1 xl:grid-cols-[1fr_390px]">
+        {/* =================================================
+            PRODUCT SECTION
+        ================================================= */}
+
+        <section className="p-6">
+          {/* SEARCH */}
+
+          <div className="mb-5 flex flex-col gap-3 lg:flex-row">
+            <div className="relative flex-1">
+              <Search
+                size={19}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+
+              <input
+                type="text"
+                value={search}
+                onChange={(e) =>
+                  setSearch(
+                    e.target.value
+                  )
+                }
+                placeholder="Cari nama barang..."
+                className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+              />
+            </div>
+          </div>
+
+          {/* CATEGORY */}
+
+          <div className="mb-6 flex gap-2 overflow-x-auto pb-1">
+            {categories.map(
+              (item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() =>
+                    setKategori(item)
+                  }
+                  className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition ${
+                    kategori === item
+                      ? "bg-slate-900 text-white"
+                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {item}
+                </button>
+              )
+            )}
+          </div>
+
+          {/* ERROR */}
+
+          {barangError && (
+            <div className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+              <AlertCircle
+                size={20}
+                className="mt-0.5 shrink-0 text-red-500"
+              />
+
+              <div>
+                <p className="text-sm font-semibold text-red-700">
+                  Gagal memuat barang
+                </p>
+
+                <p className="mt-1 text-sm text-red-600">
+                  {barangError}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={
+                    fetchBarang
+                  }
+                  className="mt-3 text-sm font-semibold text-red-700 underline"
+                >
+                  Coba lagi
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* LOADING */}
+
+          {loadingBarang ? (
+            <div className="flex min-h-[400px] items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2
+                  size={28}
+                  className="animate-spin text-slate-400"
+                />
+
+                <p className="text-sm text-slate-500">
+                  Memuat data barang...
+                </p>
+              </div>
+            </div>
+          ) : filteredBarang.length ===
+            0 ? (
+            /* EMPTY */
+
+            <div className="flex min-h-[400px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
+                <Package
+                  size={26}
+                  className="text-slate-400"
+                />
+              </div>
+
+              <h3 className="mt-4 text-sm font-semibold text-slate-800">
+                Tidak ada barang
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-500">
+                {search
+                  ? "Barang yang dicari tidak ditemukan."
+                  : "Belum ada data barang."}
+              </p>
+            </div>
+          ) : (
+            /* PRODUCT GRID */
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+              {filteredBarang.map(
+                (item) => {
+                  const stockStatus =
+                    getStockStatus(
+                      item.stok
                     );
 
-                    const quantityInCart =
-                      cartItem?.jumlah || 0;
+                  return (
+                    <div
+                      key={
+                        item.id_barang
+                      }
+                      className="group rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:shadow-sm"
+                    >
+                      {/* PRODUCT ICON */}
 
-                    const isOutOfStock =
-                      item.stok === 0;
-
-                    const isLowStock =
-                      item.stok > 0 &&
-                      item.stok <= 10;
-
-                    const isSelected =
-                      selectedProduct ===
-                      item.id_barang;
-
-                    return (
-                      <div
-                        key={item.id_barang}
-                        role="button"
-                        tabIndex={
-                          isOutOfStock ? -1 : 0
-                        }
-                        onClick={() =>
-                          addToCart(item)
-                        }
-                        onKeyDown={(event) => {
-                          if (
-                            event.key ===
-                              "Enter" ||
-                            event.key === " "
-                          ) {
-                            event.preventDefault();
-                            addToCart(item);
-                          }
-                        }}
-                        className={`group relative rounded-xl border p-4 text-left transition-all duration-200 ${
-                          isOutOfStock
-                            ? "cursor-not-allowed border-slate-200 opacity-50"
-                            : isSelected
-                              ? "scale-[0.98] border-indigo-300 bg-indigo-50 shadow-sm"
-                              : quantityInCart > 0
-                                ? "cursor-pointer border-indigo-200 bg-indigo-50/30 shadow-sm hover:-translate-y-0.5"
-                                : "cursor-pointer border-slate-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50/20 hover:shadow-sm"
-                        }`}
-                      >
-                        {/* SELECTED INDICATOR */}
-
-                        {quantityInCart > 0 && (
-                          <div className="absolute right-3 top-3">
-                            <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-indigo-600 px-2 text-[11px] font-semibold text-white shadow-sm shadow-indigo-200">
-                              {quantityInCart}
-                            </span>
-                          </div>
-                        )}
-
-                        <div className="flex items-start justify-between gap-3">
-                          <div
-                            className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${
-                              quantityInCart > 0
-                                ? "bg-indigo-100"
-                                : "bg-indigo-50 group-hover:bg-indigo-100"
-                            }`}
-                          >
-                            <Package
-                              size={18}
-                              className="text-indigo-600"
-                            />
-                          </div>
+                      <div className="flex items-start justify-between">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100">
+                          <Package
+                            size={22}
+                            className="text-slate-500"
+                          />
                         </div>
 
-                        <p className="mt-4 line-clamp-1 text-sm font-semibold text-slate-800">
-                          {item.nama_barang}
+                        <span
+                          className={`rounded-lg px-2.5 py-1 text-xs font-medium ${stockStatus.className}`}
+                        >
+                          {
+                            stockStatus.label
+                          }
+                        </span>
+                      </div>
+
+                      {/* PRODUCT INFO */}
+
+                      <div className="mt-4">
+                        <p className="line-clamp-2 min-h-[40px] text-sm font-semibold text-slate-800">
+                          {
+                            item.nama_barang
+                          }
                         </p>
 
-                        <span className="mt-1 inline-block rounded-md bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-500">
-                          {item.kategori}
-                        </span>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {
+                            item.kategori
+                          }
+                        </p>
 
-                        <div className="mt-4 flex items-end justify-between">
+                        <div className="mt-3 flex items-end justify-between gap-3">
                           <div>
-                            <p className="text-sm font-bold text-indigo-600">
+                            <p className="text-base font-bold text-slate-900">
                               {formatRupiah(
                                 item.harga
                               )}
                             </p>
 
-                            <p
-                              className={`mt-1 text-[11px] ${
-                                isLowStock
-                                  ? "font-semibold text-orange-500"
-                                  : "text-slate-400"
-                              }`}
-                            >
-                              Stok {item.stok}{" "}
-                              {item.satuan}
+                            <p className="mt-0.5 text-xs text-slate-400">
+                              Stok:{" "}
+                              {
+                                item.stok
+                              }{" "}
+                              {
+                                item.satuan
+                              }
                             </p>
                           </div>
 
                           <button
                             type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              addToCart(item);
-                            }}
-                            disabled={
-                              isOutOfStock ||
-                              quantityInCart >=
-                                item.stok
+                            onClick={() =>
+                              addToCart(
+                                item
+                              )
                             }
-                            aria-label={`Tambah ${item.nama_barang}`}
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 transition-all hover:bg-indigo-600 hover:text-white hover:shadow-sm hover:shadow-indigo-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none"
+                            disabled={
+                              item.stok <=
+                              0
+                            }
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                            title="Tambah ke keranjang"
                           >
-                            <Plus size={17} />
+                            <Plus
+                              size={18}
+                            />
                           </button>
                         </div>
-
-                        {/* OUT OF STOCK */}
-
-                        {isOutOfStock && (
-                          <div className="absolute inset-x-0 bottom-0 rounded-b-xl bg-slate-100 py-1.5 text-center">
-                            <span className="text-[10px] font-semibold text-slate-500">
-                              Stok Habis
-                            </span>
-                          </div>
-                        )}
                       </div>
-                    );
-                  })}
-                </div>
-
-                {/* EMPTY */}
-
-                {filteredBarang.length === 0 && (
-                  <div className="py-16 text-center">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50">
-                      <Search
-                        size={22}
-                        className="text-indigo-400"
-                      />
                     </div>
-
-                    <p className="mt-3 text-sm font-medium text-slate-600">
-                      Barang tidak ditemukan
-                    </p>
-
-                    <p className="mt-1 text-xs text-slate-400">
-                      Coba gunakan kata kunci lain
-                    </p>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSearch("");
-                        setCategory("Semua");
-                      }}
-                      className="mt-4 rounded-lg bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-600 transition hover:bg-indigo-100"
-                    >
-                      Reset pencarian
-                    </button>
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {/* =========================
-                RIGHT CART DESKTOP
-            ========================= */}
-
-            <section className="hidden h-fit flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:sticky lg:top-6 lg:flex">
-              <CartContent
-                cart={cart}
-                totalItem={totalItem}
-                totalHarga={totalHarga}
-                formatRupiah={formatRupiah}
-                increaseQuantity={
-                  increaseQuantity
+                  );
                 }
-                decreaseQuantity={
-                  decreaseQuantity
-                }
-                removeFromCart={removeFromCart}
-                clearCart={clearCart}
-                onPayment={() =>
-                  setShowPaymentModal(true)
-                }
-              />
-            </section>
-          </div>
-        </div>
-      </main>
+              )}
+            </div>
+          )}
+        </section>
 
-      {/* =========================
-          MOBILE CART
-      ========================= */}
+        {/* =================================================
+            CART
+        ================================================= */}
 
-      {isCartOpen && (
-        <div className="fixed inset-0 z-[90] lg:hidden">
-          <div
-            className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]"
-            onClick={() => setIsCartOpen(false)}
-          />
+        <aside className="border-t border-slate-200 bg-white xl:border-l xl:border-t-0">
+          <div className="sticky top-0 flex h-[calc(100vh-140px)] flex-col">
+            {/* CART HEADER */}
 
-          <div className="absolute bottom-0 left-0 right-0 max-h-[90vh] overflow-hidden rounded-t-2xl bg-white shadow-2xl">
-            <CartContent
-              cart={cart}
-              totalItem={totalItem}
-              totalHarga={totalHarga}
-              formatRupiah={formatRupiah}
-              increaseQuantity={
-                increaseQuantity
-              }
-              decreaseQuantity={
-                decreaseQuantity
-              }
-              removeFromCart={removeFromCart}
-              clearCart={clearCart}
-              onPayment={() => {
-                setIsCartOpen(false);
-                setShowPaymentModal(true);
-              }}
-              mobile
-              onClose={() =>
-                setIsCartOpen(false)
-              }
-            />
-          </div>
-        </div>
-      )}
-
-      {/* =========================
-          PAYMENT MODAL
-      ========================= */}
-
-      {showPaymentModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-[2px]">
-          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-100 p-5">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50">
-                  <Banknote
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
+                  <ShoppingCart
                     size={19}
-                    className="text-amber-600"
+                    className="text-slate-600"
                   />
                 </div>
 
                 <div>
-                  <h2 className="font-semibold text-slate-900">
-                    Pembayaran
+                  <h2 className="text-sm font-bold text-slate-900">
+                    Keranjang
                   </h2>
 
-                  <p className="mt-1 text-xs text-slate-400">
-                    Masukkan jumlah uang pelanggan
+                  <p className="text-xs text-slate-400">
+                    {totalItem} item
                   </p>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() =>
-                  setShowPaymentModal(false)
-                }
-                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-              >
-                <X size={19} />
-              </button>
+              {cart.length > 0 && (
+                <button
+                  type="button"
+                  onClick={
+                    clearCart
+                  }
+                  className="text-xs font-medium text-red-500 hover:text-red-600"
+                >
+                  Kosongkan
+                </button>
+              )}
             </div>
 
-            <div className="p-5">
-              {/* TOTAL */}
+            {/* CART CONTENT */}
 
-              <div className="rounded-xl bg-indigo-50 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-indigo-500">
-                      Total Pembayaran
-                    </p>
-
-                    <p className="mt-1 text-2xl font-bold text-indigo-700">
-                      {formatRupiah(totalHarga)}
-                    </p>
-                  </div>
-
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white">
-                    <Receipt
-                      size={18}
-                      className="text-indigo-500"
+            <div className="flex-1 overflow-y-auto p-5">
+              {cart.length === 0 ? (
+                <div className="flex h-full min-h-[300px] flex-col items-center justify-center text-center">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
+                    <ShoppingCart
+                      size={28}
+                      className="text-slate-400"
                     />
                   </div>
+
+                  <h3 className="mt-4 text-sm font-semibold text-slate-800">
+                    Keranjang kosong
+                  </h3>
+
+                  <p className="mt-1 max-w-[220px] text-xs leading-5 text-slate-400">
+                    Tambahkan barang dari
+                    daftar produk untuk
+                    membuat transaksi.
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-3">
+                  {cart.map(
+                    (item) => (
+                      <div
+                        key={
+                          item.id_barang
+                        }
+                        className="rounded-xl border border-slate-200 p-3"
+                      >
+                        <div className="flex gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+                            <Package
+                              size={17}
+                              className="text-slate-500"
+                            />
+                          </div>
 
-              {/* PAYMENT */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="line-clamp-2 text-sm font-semibold text-slate-800">
+                                {
+                                  item.nama_barang
+                                }
+                              </p>
 
-              <div className="mt-5">
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Uang Dibayar
-                </label>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  removeFromCart(
+                                    item.id_barang
+                                  )
+                                }
+                                className="shrink-0 text-slate-400 transition hover:text-red-500"
+                              >
+                                <Trash2
+                                  size={
+                                    15
+                                  }
+                                />
+                              </button>
+                            </div>
 
-                <div className="relative">
-                  <Banknote
-                    size={18}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500"
-                  />
+                            <p className="mt-1 text-xs text-slate-400">
+                              {formatRupiah(
+                                item.harga
+                              )}{" "}
+                              /{" "}
+                              {
+                                item.satuan
+                              }
+                            </p>
 
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    autoFocus
-                    value={payment}
-                    onChange={(e) =>
-                      setPayment(e.target.value)
-                    }
-                    placeholder="0"
-                    min={0}
-                    className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-lg font-semibold text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-amber-300 focus:ring-2 focus:ring-amber-100"
-                  />
+                            <div className="mt-3 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    decreaseQuantity(
+                                      item.id_barang
+                                    )
+                                  }
+                                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-100"
+                                >
+                                  <Minus
+                                    size={
+                                      14
+                                    }
+                                  />
+                                </button>
 
-                  {payment && (
-                    <button
-                      type="button"
-                      onClick={() => setPayment("")}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-100"
-                    >
-                      <X size={14} />
-                    </button>
+                                <span className="min-w-[24px] text-center text-sm font-semibold text-slate-800">
+                                  {
+                                    item.jumlah
+                                  }
+                                </span>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    increaseQuantity(
+                                      item.id_barang
+                                    )
+                                  }
+                                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-100"
+                                >
+                                  <Plus
+                                    size={
+                                      14
+                                    }
+                                  />
+                                </button>
+                              </div>
+
+                              <p className="text-sm font-bold text-slate-900">
+                                {formatRupiah(
+                                  item.harga *
+                                    item.jumlah
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
                   )}
                 </div>
+              )}
+            </div>
 
-                {/* QUICK PAYMENT */}
+            {/* CART FOOTER */}
 
-                <div className="mt-4">
-                  <p className="mb-2 text-xs font-medium text-slate-400">
-                    Nominal cepat
-                  </p>
+            <div className="border-t border-slate-200 p-5">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-500">
+                    Total item
+                  </span>
 
-                  <div className="grid grid-cols-4 gap-2">
-                    {quickPayments.map(
-                      (amount) => (
-                        <button
-                          key={amount}
-                          type="button"
-                          onClick={() =>
-                            handleQuickPayment(
-                              amount
-                            )
-                          }
-                          className={`rounded-lg border px-2 py-2 text-xs font-medium transition ${
-                            paymentAmount ===
-                            amount
-                              ? "border-amber-300 bg-amber-50 text-amber-700"
-                              : "border-slate-200 bg-slate-50 text-slate-600 hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700"
-                          }`}
-                        >
-                          {formatRupiah(amount)}
-                        </button>
-                      )
-                    )}
-                  </div>
+                  <span className="font-medium text-slate-800">
+                    {totalItem}
+                  </span>
                 </div>
-              </div>
 
-              {/* CHANGE */}
-
-              <div
-                className={`mt-4 rounded-xl border p-4 transition-all ${
-                  paymentAmount > 0 &&
-                  paymentAmount < totalHarga
-                    ? "border-red-100 bg-red-50"
-                    : paymentAmount >=
-                          totalHarga &&
-                        paymentAmount > 0
-                      ? "border-emerald-100 bg-emerald-50"
-                      : "border-slate-200 bg-slate-50"
-                }`}
-              >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-slate-600">
-                    Kembalian
+                    Total pembayaran
                   </span>
 
-                  <span
-                    className={`text-lg font-bold ${
-                      paymentAmount >=
-                        totalHarga &&
-                      paymentAmount > 0
-                        ? "text-emerald-600"
-                        : paymentAmount > 0
-                          ? "text-slate-900"
-                          : "text-slate-400"
-                    }`}
-                  >
-                    {formatRupiah(change)}
+                  <span className="text-lg font-bold text-slate-900">
+                    {formatRupiah(
+                      totalHarga
+                    )}
                   </span>
                 </div>
-
-                {paymentAmount > 0 &&
-                  paymentAmount < totalHarga && (
-                    <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-red-500">
-                      <AlertCircle size={13} />
-
-                      <span>
-                        Kurang{" "}
-                        {formatRupiah(
-                          totalHarga -
-                            paymentAmount
-                        )}
-                      </span>
-                    </div>
-                  )}
-
-                {paymentAmount >= totalHarga &&
-                  paymentAmount > 0 && (
-                    <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-emerald-600">
-                      <CheckCircle2 size={13} />
-                      Pembayaran mencukupi
-                    </div>
-                  )}
               </div>
 
-              {/* BUTTON */}
+              <button
+                type="button"
+                onClick={
+                  openPaymentModal
+                }
+                disabled={
+                  cart.length === 0
+                }
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+              >
+                <CreditCard
+                  size={18}
+                />
 
-              <div className="mt-5 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setShowPaymentModal(false)
-                  }
-                  className="flex-1 rounded-xl px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
-                >
-                  Batal
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handlePayment}
-                  disabled={
-                    paymentAmount < totalHarga ||
-                    isProcessing
-                  }
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-indigo-200 transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-                >
-                  {isProcessing ? (
-                    <>
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                      Memproses...
-                    </>
-                  ) : (
-                    <>
-                      <CreditCard size={17} />
-                      Bayar
-                    </>
-                  )}
-                </button>
-              </div>
+                Bayar Sekarang
+              </button>
             </div>
           </div>
-        </div>
-      )}
+        </aside>
+      </div>
 
-      {/* =========================
-          SUCCESS MODAL
-      ========================= */}
+      {/* =====================================================
+          PAYMENT MODAL
+      ===================================================== */}
 
-      {transactionSuccess &&
-        lastTransaction && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-[2px]">
-            <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-300">
-              <div className="p-7 text-center">
-                <div className="mx-auto flex h-16 w-16 animate-pulse items-center justify-center rounded-full bg-emerald-50">
-                  <CheckCircle2
-                    size={34}
-                    className="text-emerald-500"
-                  />
-                </div>
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
 
-                <h2 className="mt-5 text-xl font-bold text-slate-900">
-                  Transaksi Berhasil
+            {/* HEADER */}
+
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Pembayaran
                 </h2>
 
-                <p className="mt-2 text-sm text-slate-500">
-                  Pembayaran berhasil diproses.
-                </p>
-
-                <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-4 text-left">
-                  <div className="mb-4 flex items-center justify-between">
-                    <span className="text-xs font-medium text-slate-400">
-                      ID Transaksi
-                    </span>
-
-                    <span className="rounded-md bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-600">
-                      #
-                      {lastTransaction.id_transaksi.slice(
-                        0,
-                        8
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between">
-                    <span className="text-sm text-slate-500">
-                      Total
-                    </span>
-
-                    <span className="font-semibold text-slate-900">
-                      {formatRupiah(
-                        lastTransaction.total_harga
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 flex justify-between">
-                    <span className="text-sm text-slate-500">
-                      Dibayar
-                    </span>
-
-                    <span className="font-semibold text-slate-900">
-                      {formatRupiah(
-                        paymentAmount
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 border-t border-slate-200 pt-3">
-                    <div className="flex justify-between">
-                      <span className="text-sm font-medium text-slate-600">
-                        Kembalian
-                      </span>
-
-                      <span className="font-bold text-emerald-600">
-                        {formatRupiah(change)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={resetTransaction}
-                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-indigo-200 transition hover:bg-indigo-700 hover:shadow-md"
-                >
-                  <Plus size={17} />
-                  Transaksi Baru
-                </button>
-              </div>
-
-              <div className="border-t border-slate-100 bg-emerald-50/50 px-5 py-3 text-center">
-                <p className="flex items-center justify-center gap-1.5 text-xs font-medium text-emerald-600">
-                  <CheckCircle2 size={13} />
-                  Transaksi telah berhasil diselesaikan
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Pilih metode dan selesaikan pembayaran
                 </p>
               </div>
-            </div>
-          </div>
-        )}
 
-      {/* =========================
-          TOAST
-      ========================= */}
-
-      {toast && (
-        <div className="fixed bottom-5 left-1/2 z-[200] -translate-x-1/2 animate-in fade-in slide-in-from-bottom-3 duration-200">
-          <div className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-xl">
-            <CheckCircle2
-              size={16}
-              className="text-emerald-400"
-            />
-
-            {toast}
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-/* =========================
-   CART CONTENT
-========================= */
-
-interface CartContentProps {
-  cart: CartItem[];
-  totalItem: number;
-  totalHarga: number;
-  formatRupiah: (value: number) => string;
-  increaseQuantity: (id_barang: string) => void;
-  decreaseQuantity: (id_barang: string) => void;
-  removeFromCart: (id_barang: string) => void;
-  clearCart: () => void;
-  onPayment: () => void;
-  mobile?: boolean;
-  onClose?: () => void;
-}
-
-function CartContent({
-  cart,
-  totalItem,
-  totalHarga,
-  formatRupiah,
-  increaseQuantity,
-  decreaseQuantity,
-  removeFromCart,
-  clearCart,
-  onPayment,
-  mobile,
-  onClose,
-}: CartContentProps) {
-  return (
-    <>
-      {/* HEADER */}
-
-      <div className="border-b border-slate-100 p-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
-              <ShoppingCart
-                size={19}
-                className="text-emerald-600"
-              />
-            </div>
-
-            <div>
-              <h2 className="font-semibold text-slate-900">
-                Keranjang
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-400">
-                {totalItem} item
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1">
-            {cart.length > 0 && (
               <button
                 type="button"
-                onClick={clearCart}
-                className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-500 transition hover:bg-red-50 hover:text-red-600"
-              >
-                Kosongkan
-              </button>
-            )}
-
-            {mobile && onClose && (
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100"
+                onClick={
+                  closePaymentModal
+                }
+                disabled={
+                  processingPayment
+                }
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed"
               >
                 <X size={18} />
               </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ITEMS */}
-
-      <div className="max-h-[480px] overflow-y-auto p-5">
-        {cart.length === 0 ? (
-          <div className="py-16 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50">
-              <ShoppingCart
-                size={23}
-                className="text-emerald-500"
-              />
             </div>
 
-            <p className="mt-4 text-sm font-medium text-slate-600">
-              Keranjang masih kosong
-            </p>
+            {/* CONTENT */}
 
-            <p className="mt-1 text-xs text-slate-400">
-              Pilih barang untuk memulai transaksi
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {cart.map((item) => (
-              <div
-                key={item.id_barang}
-                className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5 transition-all duration-200 hover:border-emerald-100 hover:bg-emerald-50/30"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
-                      <Package
-                        size={15}
-                        className="text-emerald-600"
-                      />
-                    </div>
+            <div className="p-5">
 
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-800">
-                        {item.nama_barang}
-                      </p>
+              {/* TOTAL */}
 
-                      <p className="mt-1 text-xs text-slate-400">
-                        {formatRupiah(item.harga)} /{" "}
-                        {item.satuan}
-                      </p>
-                    </div>
-                  </div>
+              <div className="rounded-xl bg-slate-50 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-500">
+                    Total yang harus dibayar
+                  </span>
+
+                  <span className="text-xl font-bold text-slate-900">
+                    {formatRupiah(
+                      totalHarga
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              {/* PAYMENT METHOD */}
+
+              <div className="mt-5">
+                <label className="mb-3 block text-sm font-medium text-slate-700">
+                  Metode Pembayaran
+                </label>
+
+                <div className="grid grid-cols-2 gap-3">
+
+                  {/* TUNAI */}
 
                   <button
                     type="button"
                     onClick={() =>
-                      removeFromCart(
-                        item.id_barang
+                      handlePaymentMethodChange(
+                        "tunai"
                       )
                     }
-                    className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                    disabled={
+                      processingPayment
+                    }
+                    className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${
+                      paymentMethod ===
+                      "tunai"
+                        ? "border-slate-400 bg-slate-50 ring-2 ring-slate-100"
+                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                    }`}
                   >
-                    <Trash2 size={15} />
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                        paymentMethod ===
+                        "tunai"
+                          ? "bg-white"
+                          : "bg-slate-100"
+                      }`}
+                    >
+                      <Banknote
+                        size={19}
+                        className={
+                          paymentMethod ===
+                          "tunai"
+                            ? "text-slate-700"
+                            : "text-slate-500"
+                        }
+                      />
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">
+                        Tunai
+                      </p>
+
+                      <p className="mt-0.5 text-[11px] text-slate-400">
+                        Uang fisik
+                      </p>
+                    </div>
                   </button>
-                </div>
 
-                <div className="mt-3 flex items-center justify-between">
-                  {/* QUANTITY */}
+                  {/* QRIS */}
 
-                  <div className="flex items-center gap-2 rounded-lg bg-white p-1 shadow-sm ring-1 ring-slate-100">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        decreaseQuantity(
-                          item.id_barang
-                        )
-                      }
-                      className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-50 text-slate-500 transition hover:bg-red-50 hover:text-red-500"
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handlePaymentMethodChange(
+                        "qris"
+                      )
+                    }
+                    disabled={
+                      processingPayment
+                    }
+                    className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${
+                      paymentMethod ===
+                      "qris"
+                        ? "border-slate-400 bg-slate-50 ring-2 ring-slate-100"
+                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                        paymentMethod ===
+                        "qris"
+                          ? "bg-white"
+                          : "bg-slate-100"
+                      }`}
                     >
-                      <Minus size={13} />
-                    </button>
+                      <QrCode
+                        size={19}
+                        className={
+                          paymentMethod ===
+                          "qris"
+                            ? "text-slate-700"
+                            : "text-slate-500"
+                        }
+                      />
+                    </div>
 
-                    <span className="w-7 text-center text-sm font-semibold text-slate-700">
-                      {item.jumlah}
-                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">
+                        QRIS
+                      </p>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        increaseQuantity(
-                          item.id_barang
-                        )
-                      }
-                      disabled={
-                        item.jumlah >= item.stok
-                      }
-                      className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-50 text-emerald-600 transition hover:bg-emerald-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      <p className="mt-0.5 text-[11px] text-slate-400">
+                        Scan QR
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* DEBIT */}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handlePaymentMethodChange(
+                        "debit"
+                      )
+                    }
+                    disabled={
+                      processingPayment
+                    }
+                    className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${
+                      paymentMethod ===
+                      "debit"
+                        ? "border-slate-400 bg-slate-50 ring-2 ring-slate-100"
+                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                        paymentMethod ===
+                        "debit"
+                          ? "bg-white"
+                          : "bg-slate-100"
+                      }`}
                     >
-                      <Plus size={13} />
-                    </button>
-                  </div>
+                      <CreditCard
+                        size={19}
+                        className={
+                          paymentMethod ===
+                          "debit"
+                            ? "text-slate-700"
+                            : "text-slate-500"
+                        }
+                      />
+                    </div>
 
-                  {/* SUBTOTAL */}
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">
+                        Debit
+                      </p>
 
-                  <p className="text-sm font-bold text-slate-900">
-                    {formatRupiah(item.subtotal)}
-                  </p>
+                      <p className="mt-0.5 text-[11px] text-slate-400">
+                        Kartu debit
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* TRANSFER */}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handlePaymentMethodChange(
+                        "transfer"
+                      )
+                    }
+                    disabled={
+                      processingPayment
+                    }
+                    className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${
+                      paymentMethod ===
+                      "transfer"
+                        ? "border-slate-400 bg-slate-50 ring-2 ring-slate-100"
+                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                        paymentMethod ===
+                        "transfer"
+                          ? "bg-white"
+                          : "bg-slate-100"
+                      }`}
+                    >
+                      <ArrowLeftRight
+                        size={19}
+                        className={
+                          paymentMethod ===
+                          "transfer"
+                            ? "text-slate-700"
+                            : "text-slate-500"
+                        }
+                      />
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">
+                        Transfer
+                      </p>
+
+                      <p className="mt-0.5 text-[11px] text-slate-400">
+                        Transfer bank
+                      </p>
+                    </div>
+                  </button>
+
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
 
-      {/* SUMMARY */}
+              {/* =================================================
+                  CASH PAYMENT
+              ================================================= */}
 
-      <div className="border-t border-slate-100 p-5">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-500">
-              Total Item
-            </span>
+              {paymentMethod ===
+                "tunai" && (
+                <div className="mt-5">
 
-            <span className="font-medium text-slate-700">
-              {totalItem}
-            </span>
-          </div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Uang diterima
+                  </label>
 
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-500">
-              Subtotal
-            </span>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-400">
+                      Rp
+                    </span>
 
-            <span className="font-medium text-slate-700">
-              {formatRupiah(totalHarga)}
-            </span>
-          </div>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={
+                        payment
+                          ? new Intl.NumberFormat(
+                              "id-ID"
+                            ).format(
+                              Number(
+                                payment
+                              )
+                            )
+                          : ""
+                      }
+                      onChange={(e) =>
+                        handlePaymentChange(
+                          e.target
+                            .value
+                        )
+                      }
+                      placeholder="0"
+                      disabled={
+                        processingPayment
+                      }
+                      className="w-full rounded-xl border border-slate-200 py-3 pl-11 pr-4 text-right text-lg font-semibold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-100"
+                    />
+                  </div>
 
-          <div className="rounded-xl bg-indigo-50 p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-indigo-900">
-                Total
-              </span>
+                  {/* QUICK AMOUNT */}
 
-              <span className="text-xl font-bold text-indigo-600">
-                {formatRupiah(totalHarga)}
-              </span>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {[
+                      totalHarga,
+                      Math.ceil(
+                        totalHarga /
+                          10000
+                      ) * 10000,
+                      Math.ceil(
+                        totalHarga /
+                          50000
+                      ) * 50000,
+                      Math.ceil(
+                        totalHarga /
+                          100000
+                      ) * 100000,
+                    ]
+                      .filter(
+                        (
+                          value,
+                          index,
+                          array
+                        ) =>
+                          array.indexOf(
+                            value
+                          ) ===
+                          index
+                      )
+                      .map(
+                        (amount) => (
+                          <button
+                            key={
+                              amount
+                            }
+                            type="button"
+                            onClick={() =>
+                              setQuickPayment(
+                                amount
+                              )
+                            }
+                            disabled={
+                              processingPayment
+                            }
+                            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed"
+                          >
+                            {formatRupiah(
+                              amount
+                            )}
+                          </button>
+                        )
+                      )}
+                  </div>
+
+                  {/* CHANGE */}
+
+                  <div className="mt-5 rounded-xl border border-slate-200 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-500">
+                        Kembalian
+                      </span>
+
+                      <span
+                        className={`text-lg font-bold ${
+                          paymentAmount >=
+                          totalHarga
+                            ? "text-emerald-600"
+                            : "text-slate-400"
+                        }`}
+                      >
+                        {formatRupiah(
+                          kembalian
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                </div>
+              )}
+
+              {/* =================================================
+                  NON CASH PAYMENT
+              ================================================= */}
+
+              {paymentMethod !==
+                "tunai" && (
+                <div className="mt-5">
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-slate-400">
+                          Metode pembayaran
+                        </p>
+
+                        <p className="mt-1 text-sm font-semibold capitalize text-slate-800">
+                          {paymentMethod}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="text-xs text-slate-400">
+                          Nominal
+                        </p>
+
+                        <p className="mt-1 text-sm font-bold text-slate-900">
+                          {formatRupiah(
+                            totalHarga
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-100 bg-amber-50 p-3">
+                    <AlertCircle
+                      size={16}
+                      className="mt-0.5 shrink-0 text-amber-500"
+                    />
+
+                    <p className="text-xs leading-5 text-amber-700">
+                      Pastikan pembayaran{" "}
+                      <span className="font-semibold uppercase">
+                        {paymentMethod}
+                      </span>{" "}
+                      sudah diterima sebelum
+                      mengonfirmasi transaksi.
+                    </p>
+                  </div>
+
+                </div>
+              )}
+
+              {/* ERROR */}
+
+              {paymentError && (
+                <div className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3">
+                  <AlertCircle
+                    size={17}
+                    className="mt-0.5 shrink-0 text-red-500"
+                  />
+
+                  <p className="text-sm text-red-600">
+                    {paymentError}
+                  </p>
+                </div>
+              )}
+
+              {/* BUTTON */}
+
+              <button
+                type="button"
+                onClick={
+                  handlePayment
+                }
+                disabled={
+                  processingPayment ||
+                  (paymentMethod ===
+                    "tunai" &&
+                    paymentAmount <
+                      totalHarga)
+                }
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+              >
+                {processingPayment ? (
+                  <>
+                    <Loader2
+                      size={18}
+                      className="animate-spin"
+                    />
+
+                    Memproses...
+                  </>
+                ) : (
+                  <>
+                    {paymentMethod ===
+                    "tunai" ? (
+                      <Banknote
+                        size={18}
+                      />
+                    ) : paymentMethod ===
+                      "qris" ? (
+                      <QrCode
+                        size={18}
+                      />
+                    ) : paymentMethod ===
+                      "debit" ? (
+                      <CreditCard
+                        size={18}
+                      />
+                    ) : (
+                      <ArrowLeftRight
+                        size={18}
+                      />
+                    )}
+
+                    {paymentMethod ===
+                    "tunai"
+                      ? "Konfirmasi Pembayaran"
+                      : "Konfirmasi Pembayaran"}
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
+      )}
 
-        <button
-          type="button"
-          disabled={cart.length === 0}
-          onClick={onPayment}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-semibold text-white shadow-sm shadow-indigo-200 transition hover:bg-indigo-700 hover:shadow-md hover:shadow-indigo-200 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
-        >
-          <CreditCard size={18} />
-          Proses Pembayaran
-        </button>
-      </div>
-    </>
+      {/* =====================================================
+          SUCCESS MODAL
+      ===================================================== */}
+
+      {showSuccessModal &&
+        transaction && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+
+              {/* SUCCESS ICON */}
+
+              <div className="flex flex-col items-center px-6 pb-5 pt-7 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
+                  <CheckCircle2
+                    size={36}
+                    className="text-emerald-500"
+                  />
+                </div>
+
+                <h2 className="mt-4 text-xl font-bold text-slate-900">
+                  Transaksi Berhasil
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Transaksi berhasil
+                  disimpan ke sistem.
+                </p>
+              </div>
+
+              {/* TRANSACTION DETAIL */}
+
+              <div className="border-y border-slate-200 px-6 py-5">
+                <div className="space-y-3">
+
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-sm text-slate-500">
+                      ID Transaksi
+                    </span>
+
+                    <span className="max-w-[220px] truncate text-right text-xs font-medium text-slate-700">
+                      {
+                        transaction.id_transaksi
+                      }
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-500">
+                      Total
+                    </span>
+
+                    <span className="text-sm font-bold text-slate-900">
+                      {formatRupiah(
+                        transaction.total_harga
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-500">
+                      Dibayar
+                    </span>
+
+                    <span className="text-sm font-medium text-slate-700">
+                      {formatRupiah(
+                        Number(
+                          transaction.dibayar ??
+                            paymentAmount
+                        )
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-500">
+                      Kembalian
+                    </span>
+
+                    <span className="text-sm font-semibold text-emerald-600">
+                      {formatRupiah(
+                        Number(
+                          transaction.kembalian ??
+                            0
+                        )
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-500">
+                      Pembayaran
+                    </span>
+
+                    <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-medium capitalize text-emerald-600">
+                      {transaction.jenis_pembayaran ??
+                        "tunai"}
+                    </span>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* ACTION */}
+
+              <div className="p-5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowSuccessModal(
+                      false
+                    )
+                  }
+                  className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
+                >
+                  Selesai
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+    </div>
   );
 }
